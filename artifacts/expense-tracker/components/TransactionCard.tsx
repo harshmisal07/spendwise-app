@@ -15,11 +15,10 @@ type Props = {
 };
 
 function formatDate(dateStr: string): string {
-  const date = new Date(dateStr);
+  const date = new Date(dateStr + "T12:00:00");
   const today = new Date();
   const yesterday = new Date();
   yesterday.setDate(today.getDate() - 1);
-
   if (date.toDateString() === today.toDateString()) return "Today";
   if (date.toDateString() === yesterday.toDateString()) return "Yesterday";
   return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
@@ -41,54 +40,62 @@ export function TransactionCard({ transaction, onDelete, onEdit }: Props) {
     onEdit(transaction.id);
   }
 
-  function renderRightActions(_: Animated.AnimatedInterpolation<number>, drag: Animated.AnimatedInterpolation<number>) {
-    const translateX = drag.interpolate({ inputRange: [-80, 0], outputRange: [0, 80], extrapolate: "clamp" });
+  function renderRightActions(
+    _: Animated.AnimatedInterpolation<number>,
+    drag: Animated.AnimatedInterpolation<number>
+  ) {
+    const translateX = drag.interpolate({
+      inputRange: [-100, 0],
+      outputRange: [0, 100],
+      extrapolate: "clamp",
+    });
     return (
-      <View style={styles.actions}>
-        <Animated.View style={{ transform: [{ translateX }] }}>
-          <TouchableOpacity onPress={handleEdit} style={[styles.action, { backgroundColor: colors.primary }]}>
-            <Ionicons name="pencil" size={18} color="#fff" />
-          </TouchableOpacity>
-        </Animated.View>
-        <Animated.View style={{ transform: [{ translateX }] }}>
-          <TouchableOpacity onPress={handleDelete} style={[styles.action, { backgroundColor: colors.destructive }]}>
-            <Ionicons name="trash" size={18} color="#fff" />
-          </TouchableOpacity>
-        </Animated.View>
-      </View>
+      <Animated.View style={[styles.actions, { transform: [{ translateX }] }]}>
+        <TouchableOpacity
+          onPress={handleEdit}
+          style={[styles.action, { backgroundColor: "#6C5CE7" }]}
+        >
+          <Ionicons name="pencil" size={17} color="#fff" />
+        </TouchableOpacity>
+        <TouchableOpacity
+          onPress={handleDelete}
+          style={[styles.action, { backgroundColor: "#FF6B6B" }]}
+        >
+          <Ionicons name="trash" size={17} color="#fff" />
+        </TouchableOpacity>
+      </Animated.View>
     );
   }
 
+  const isIncome = transaction.type === "income";
+
   return (
-    <Swipeable ref={swipeRef} renderRightActions={renderRightActions} friction={2} rightThreshold={40}>
+    <Swipeable
+      ref={swipeRef}
+      renderRightActions={renderRightActions}
+      friction={2}
+      rightThreshold={40}
+      overshootRight={false}
+    >
       <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
         <CategoryIcon categoryId={transaction.category} size={46} iconSize={22} />
         <View style={styles.info}>
           <Text style={[styles.category, { color: colors.foreground }]} numberOfLines={1}>
             {cat.name}
           </Text>
-          {transaction.notes ? (
-            <Text style={[styles.notes, { color: colors.mutedForeground }]} numberOfLines={1}>
-              {transaction.notes}
-            </Text>
-          ) : (
-            <Text style={[styles.notes, { color: colors.mutedForeground }]}>
-              {formatDate(transaction.date)}
-            </Text>
-          )}
+          <Text style={[styles.notes, { color: colors.mutedForeground }]} numberOfLines={1}>
+            {transaction.notes ? transaction.notes : formatDate(transaction.date)}
+          </Text>
         </View>
         <View style={styles.right}>
-          <Text
-            style={[
-              styles.amount,
-              { color: transaction.type === "income" ? colors.income : colors.expense },
-            ]}
-          >
-            {transaction.type === "income" ? "+" : "-"}${transaction.amount.toFixed(2)}
+          <Text style={[styles.amount, { color: isIncome ? "#00B894" : "#FF6B6B" }]}>
+            {isIncome ? "+" : "−"}${transaction.amount.toFixed(2)}
           </Text>
-          <Text style={[styles.date, { color: colors.mutedForeground }]}>
-            {formatDate(transaction.date)}
-          </Text>
+          {transaction.notes ? (
+            <Text style={[styles.date, { color: colors.mutedForeground }]}>
+              {formatDate(transaction.date)}
+            </Text>
+          ) : null}
         </View>
       </View>
     </Swipeable>
@@ -102,34 +109,16 @@ const styles = StyleSheet.create({
     padding: 14,
     marginHorizontal: 16,
     marginVertical: 4,
-    borderRadius: 16,
+    borderRadius: 18,
     borderWidth: 1,
     gap: 12,
   },
-  info: {
-    flex: 1,
-  },
-  category: {
-    fontSize: 15,
-    fontFamily: "Inter_600SemiBold",
-    marginBottom: 2,
-  },
-  notes: {
-    fontSize: 12,
-    fontFamily: "Inter_400Regular",
-  },
-  right: {
-    alignItems: "flex-end",
-  },
-  amount: {
-    fontSize: 16,
-    fontFamily: "Inter_700Bold",
-    marginBottom: 2,
-  },
-  date: {
-    fontSize: 11,
-    fontFamily: "Inter_400Regular",
-  },
+  info: { flex: 1 },
+  category: { fontSize: 15, fontFamily: "Inter_600SemiBold", marginBottom: 3 },
+  notes: { fontSize: 12, fontFamily: "Inter_400Regular" },
+  right: { alignItems: "flex-end", gap: 3 },
+  amount: { fontSize: 16, fontFamily: "Inter_700Bold" },
+  date: { fontSize: 11, fontFamily: "Inter_400Regular" },
   actions: {
     flexDirection: "row",
     alignItems: "center",
@@ -137,11 +126,10 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   action: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
+    width: 46,
+    height: 46,
+    borderRadius: 14,
     alignItems: "center",
     justifyContent: "center",
-    marginVertical: 4,
   },
 });

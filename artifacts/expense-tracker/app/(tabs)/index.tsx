@@ -2,10 +2,9 @@ import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
-import React, { useCallback } from "react";
+import React from "react";
 import {
   Alert,
-  FlatList,
   Platform,
   ScrollView,
   StyleSheet,
@@ -20,20 +19,25 @@ import { useColors } from "@/hooks/useColors";
 import { SummaryCard } from "@/components/SummaryCard";
 import { TransactionCard } from "@/components/TransactionCard";
 
+function greet() {
+  const h = new Date().getHours();
+  if (h < 12) return "Good morning";
+  if (h < 17) return "Good afternoon";
+  return "Good evening";
+}
+
 export default function DashboardScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
   const { transactions, totalIncome, totalExpenses, balance, savings, isOverBudget, deleteTransaction } = useTransactions();
 
-  const recent = transactions.slice(0, 10);
+  const recent = transactions.slice(0, 8);
   const topPad = Platform.OS === "web" ? 67 : insets.top;
-  const bottomPad = Platform.OS === "web" ? 34 : 0;
+  const fabBottom = insets.bottom + (Platform.OS === "web" ? 84 : 90);
+  const budgetPct = user?.budgetLimit ? Math.min((totalExpenses / user.budgetLimit) * 100, 100) : 0;
 
-  function handleAdd() {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    router.push("/add-transaction");
-  }
+  const initials = user?.username ? user.username.slice(0, 2).toUpperCase() : "ME";
 
   function handleDelete(id: string) {
     Alert.alert("Delete Transaction", "Are you sure?", [
@@ -46,38 +50,44 @@ export default function DashboardScreen() {
     router.push({ pathname: "/edit-transaction", params: { id } });
   }
 
-  const initials = user?.username
-    ? user.username.slice(0, 2).toUpperCase()
-    : "ME";
-
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
       <ScrollView
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={[styles.scroll, { paddingTop: topPad, paddingBottom: bottomPad + 120 }]}
+        contentContainerStyle={[styles.scroll, { paddingTop: topPad + 4, paddingBottom: fabBottom + 70 }]}
       >
         {/* Header */}
         <View style={styles.header}>
           <View>
-            <Text style={[styles.greeting, { color: colors.mutedForeground }]}>Good day,</Text>
+            <Text style={[styles.greeting, { color: colors.mutedForeground }]}>{greet()} 👋</Text>
             <Text style={[styles.username, { color: colors.foreground }]}>{user?.username ?? "User"}</Text>
           </View>
-          <View style={[styles.avatar, { backgroundColor: user?.avatarColor ?? colors.primary }]}>
+          <TouchableOpacity
+            onPress={() => router.push("/(tabs)/profile")}
+            style={[styles.avatar, { backgroundColor: user?.avatarColor ?? "#6C5CE7" }]}
+          >
             <Text style={styles.avatarText}>{initials}</Text>
-          </View>
+          </TouchableOpacity>
         </View>
 
         {/* Budget Warning */}
         {isOverBudget && (
-          <View style={[styles.warning, { backgroundColor: "#FDCB6E22", borderColor: "#FDCB6E" }]}>
-            <Ionicons name="warning" size={18} color="#FDCB6E" />
-            <Text style={[styles.warningText, { color: "#FDCB6E" }]}>
-              Budget limit exceeded! ${totalExpenses.toFixed(2)} of ${(user?.budgetLimit ?? 0).toFixed(2)}
-            </Text>
+          <View style={styles.warningBanner}>
+            <LinearGradient
+              colors={["#E17055", "#FDCB6E"]}
+              style={styles.warningGrad}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+            >
+              <Ionicons name="warning" size={18} color="#fff" />
+              <Text style={styles.warningText}>
+                Budget exceeded! ${totalExpenses.toFixed(2)} of ${(user?.budgetLimit ?? 0).toFixed(2)}
+              </Text>
+            </LinearGradient>
           </View>
         )}
 
-        {/* Main Balance Card */}
+        {/* Balance Card */}
         <View style={styles.balanceCard}>
           <SummaryCard title="Total Balance" amount={balance} variant="balance" />
         </View>
@@ -87,44 +97,60 @@ export default function DashboardScreen() {
           <SummaryCard title="Income" amount={totalIncome} variant="income" compact />
           <SummaryCard title="Expenses" amount={totalExpenses} variant="expense" compact />
         </View>
-        <View style={[styles.savingsRow, { backgroundColor: colors.card, borderColor: colors.border }]}>
-          <View style={styles.savingsLeft}>
-            <View style={[styles.savingsIcon, { backgroundColor: "#0984E322" }]}>
-              <Ionicons name="trending-up" size={20} color="#0984E3" />
-            </View>
-            <View>
-              <Text style={[styles.savingsLabel, { color: colors.mutedForeground }]}>Savings</Text>
-              <Text style={[styles.savingsAmount, { color: "#0984E3" }]}>${savings.toFixed(2)}</Text>
-            </View>
-          </View>
+
+        {/* Savings + Budget row */}
+        <View style={styles.row}>
+          <SummaryCard title="Savings" amount={savings} variant="savings" compact />
           {user?.budgetLimit ? (
-            <View style={styles.budgetRight}>
+            <View style={[styles.budgetCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+              <View style={[styles.budgetIconWrap, { backgroundColor: "#FDCB6E22" }]}>
+                <Ionicons name="shield" size={14} color="#FDCB6E" />
+              </View>
               <Text style={[styles.budgetLabel, { color: colors.mutedForeground }]}>Budget</Text>
-              <Text style={[styles.budgetAmount, { color: colors.foreground }]}>${user.budgetLimit.toFixed(2)}</Text>
+              <Text style={[styles.budgetAmount, { color: colors.foreground }]}>${user.budgetLimit.toFixed(0)}</Text>
+              <View style={[styles.budgetTrackBg, { backgroundColor: colors.muted }]}>
+                <View
+                  style={[
+                    styles.budgetTrackFill,
+                    {
+                      width: `${budgetPct}%`,
+                      backgroundColor: budgetPct > 90 ? "#FF6B6B" : budgetPct > 60 ? "#FDCB6E" : "#00B894",
+                    },
+                  ]}
+                />
+              </View>
+              <Text style={[styles.budgetPct, { color: colors.mutedForeground }]}>{budgetPct.toFixed(0)}% used</Text>
             </View>
           ) : null}
         </View>
 
         {/* Recent Transactions */}
         <View style={styles.sectionHeader}>
-          <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Recent</Text>
+          <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Recent Transactions</Text>
           {transactions.length > 5 && (
             <TouchableOpacity onPress={() => router.push("/(tabs)/history")}>
-              <Text style={[styles.seeAll, { color: colors.primary }]}>See all</Text>
+              <Text style={[styles.seeAll, { color: colors.primary }]}>See all →</Text>
             </TouchableOpacity>
           )}
         </View>
 
         {recent.length === 0 ? (
           <View style={[styles.empty, { borderColor: colors.border }]}>
-            <Ionicons name="receipt-outline" size={40} color={colors.mutedForeground} />
+            <LinearGradient
+              colors={["#6C5CE722", "#A29BFE22"]}
+              style={styles.emptyIconWrap}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+            >
+              <Ionicons name="receipt-outline" size={32} color="#6C5CE7" />
+            </LinearGradient>
             <Text style={[styles.emptyTitle, { color: colors.foreground }]}>No transactions yet</Text>
             <Text style={[styles.emptyText, { color: colors.mutedForeground }]}>
               Tap + to add your first transaction
             </Text>
           </View>
         ) : (
-          <View style={{ gap: 0 }}>
+          <View>
             {recent.map((t) => (
               <TransactionCard key={t.id} transaction={t} onDelete={handleDelete} onEdit={handleEdit} />
             ))}
@@ -134,12 +160,17 @@ export default function DashboardScreen() {
 
       {/* FAB */}
       <TouchableOpacity
-        onPress={handleAdd}
+        onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); router.push("/add-transaction"); }}
         activeOpacity={0.85}
-        style={[styles.fab, { bottom: insets.bottom + (Platform.OS === "web" ? 84 : 90) }]}
+        style={[styles.fab, { bottom: fabBottom }]}
       >
-        <LinearGradient colors={["#6C5CE7", "#A29BFE"]} style={styles.fabGradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
-          <Ionicons name="add" size={28} color="#fff" />
+        <LinearGradient
+          colors={["#4834D4", "#6C5CE7"]}
+          style={styles.fabGrad}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+        >
+          <Ionicons name="add" size={30} color="#fff" />
         </LinearGradient>
       </TouchableOpacity>
     </View>
@@ -152,75 +183,62 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: 20,
-    paddingTop: 8,
+    marginBottom: 16,
+    paddingTop: 4,
   },
   greeting: { fontSize: 13, fontFamily: "Inter_400Regular", marginBottom: 2 },
-  username: { fontSize: 22, fontFamily: "Inter_700Bold" },
+  username: { fontSize: 24, fontFamily: "Inter_700Bold" },
   avatar: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    alignItems: "center",
-    justifyContent: "center",
+    width: 48, height: 48, borderRadius: 24,
+    alignItems: "center", justifyContent: "center",
+    shadowColor: "#6C5CE7", shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.3, shadowRadius: 6, elevation: 4,
   },
-  avatarText: { color: "#fff", fontSize: 16, fontFamily: "Inter_700Bold" },
-  warning: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    padding: 12,
-    borderRadius: 12,
-    borderWidth: 1,
-    marginBottom: 16,
+  avatarText: { color: "#fff", fontSize: 17, fontFamily: "Inter_700Bold" },
+  warningBanner: { marginBottom: 14, borderRadius: 14, overflow: "hidden" },
+  warningGrad: {
+    flexDirection: "row", alignItems: "center", gap: 8,
+    padding: 12, borderRadius: 14,
   },
-  warningText: { fontSize: 13, fontFamily: "Inter_500Medium", flex: 1 },
-  balanceCard: { marginBottom: 14 },
+  warningText: { color: "#fff", fontSize: 13, fontFamily: "Inter_500Medium", flex: 1 },
+  balanceCard: { marginBottom: 12 },
   row: { flexDirection: "row", gap: 12, marginBottom: 12 },
-  savingsRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    borderRadius: 16,
-    padding: 16,
-    borderWidth: 1,
-    marginBottom: 24,
+  budgetCard: {
+    flex: 1, borderRadius: 18, padding: 16, borderWidth: 1, gap: 4,
   },
-  savingsLeft: { flexDirection: "row", alignItems: "center", gap: 12 },
-  savingsIcon: { width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center" },
-  savingsLabel: { fontSize: 12, fontFamily: "Inter_400Regular", marginBottom: 2 },
-  savingsAmount: { fontSize: 20, fontFamily: "Inter_700Bold" },
-  budgetRight: { alignItems: "flex-end" },
-  budgetLabel: { fontSize: 12, fontFamily: "Inter_400Regular", marginBottom: 2 },
-  budgetAmount: { fontSize: 16, fontFamily: "Inter_600SemiBold" },
-  sectionHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 8 },
+  budgetIconWrap: {
+    width: 28, height: 28, borderRadius: 14,
+    alignItems: "center", justifyContent: "center", marginBottom: 2,
+  },
+  budgetLabel: { fontSize: 12, fontFamily: "Inter_400Regular" },
+  budgetAmount: { fontSize: 18, fontFamily: "Inter_700Bold" },
+  budgetTrackBg: { height: 5, borderRadius: 3, overflow: "hidden", marginVertical: 4 },
+  budgetTrackFill: { height: "100%", borderRadius: 3 },
+  budgetPct: { fontSize: 11, fontFamily: "Inter_400Regular" },
+  sectionHeader: {
+    flexDirection: "row", justifyContent: "space-between",
+    alignItems: "center", marginBottom: 8, marginTop: 4,
+  },
   sectionTitle: { fontSize: 18, fontFamily: "Inter_700Bold" },
-  seeAll: { fontSize: 14, fontFamily: "Inter_500Medium" },
+  seeAll: { fontSize: 13, fontFamily: "Inter_500Medium" },
   empty: {
-    alignItems: "center",
-    justifyContent: "center",
-    padding: 40,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderStyle: "dashed",
-    gap: 8,
+    alignItems: "center", padding: 40,
+    borderRadius: 20, borderWidth: 1,
+    borderStyle: "dashed", gap: 10,
+  },
+  emptyIconWrap: {
+    width: 72, height: 72, borderRadius: 24,
+    alignItems: "center", justifyContent: "center",
   },
   emptyTitle: { fontSize: 16, fontFamily: "Inter_600SemiBold" },
   emptyText: { fontSize: 13, fontFamily: "Inter_400Regular", textAlign: "center" },
   fab: {
-    position: "absolute",
-    right: 20,
-    shadowColor: "#6C5CE7",
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.35,
-    shadowRadius: 12,
-    elevation: 8,
+    position: "absolute", right: 20,
+    shadowColor: "#6C5CE7", shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.4, shadowRadius: 16, elevation: 10,
   },
-  fabGradient: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    alignItems: "center",
-    justifyContent: "center",
+  fabGrad: {
+    width: 62, height: 62, borderRadius: 31,
+    alignItems: "center", justifyContent: "center",
   },
 });
