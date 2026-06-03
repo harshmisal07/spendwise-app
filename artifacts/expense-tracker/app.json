@@ -9,26 +9,33 @@
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "splash": {
-      "image": "./assets/images/icon.png",
-      "resizeMode": "contain",
+      "image": "./assets/images/splash.png",
+      "resizeMode": "cover",
       "backgroundColor": "#0D0D1A"
     },
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.harshwardhan.expensetracker",
-      "buildNumber": "1"
+      "buildNumber": "1",
+      "icon": "./assets/images/icon.png"
     },
     "android": {
       "package": "com.harshwardhan.expensetracker",
       "versionCode": 1,
       "adaptiveIcon": {
-        "foregroundImage": "./assets/images/icon.png",
+        "foregroundImage": "./assets/images/adaptive-icon.png",
+        "monochromeImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#0D0D1A"
       },
       "splash": {
-        "image": "./assets/images/icon.png",
-        "resizeMode": "contain",
-        "backgroundColor": "#0D0D1A"
+        "image": "./assets/images/splash.png",
+        "resizeMode": "cover",
+        "backgroundColor": "#0D0D1A",
+        "mdpi": "./assets/images/splash.png",
+        "hdpi": "./assets/images/splash.png",
+        "xhdpi": "./assets/images/splash.png",
+        "xxhdpi": "./assets/images/splash.png",
+        "xxxhdpi": "./assets/images/splash.png"
       },
       "permissions": [],
       "softwareKeyboardLayoutMode": "pan"

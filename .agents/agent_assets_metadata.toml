@@ -1,8 +1,37 @@
 uploads = []
-outputs = []
 
 [[generated]]
 id = "dPkZHseIqGoNwE464NBuJ"
 uri = "file://artifacts/expense-tracker/assets/images/icon.png"
 type = "image"
-title = "generated_image"
+title = "spendwise app icon"
+
+[[generated]]
+id = "g0wACR_xmOoRURNeM8hpW"
+uri = "file://artifacts/expense-tracker/assets/images/adaptive-icon.png"
+type = "image"
+title = "spendwise adaptive icon foreground"
+
+[[generated]]
+id = "uq0P8X-sGg8MZ7yF1-3AR"
+uri = "file://artifacts/expense-tracker/assets/images/splash.png"
+type = "image"
+title = "spendwise splash screen"
+
+[[outputs]]
+id = "hRUzsb-BukgyNVyBb24K1"
+uri = "file://artifacts/expense-tracker/assets/images/icon.png"
+type = "image"
+title = "SpendWise App Icon (1:1)"
+
+[[outputs]]
+id = "73Kcpl02soB9lckPC7kef"
+uri = "file://artifacts/expense-tracker/assets/images/adaptive-icon.png"
+type = "image"
+title = "Android Adaptive Icon Foreground"
+
+[[outputs]]
+id = "3IqSHOgcHNek1CACON9xy"
+uri = "file://artifacts/expense-tracker/assets/images/splash.png"
+type = "image"
+title = "Splash Screen (9:16)"
