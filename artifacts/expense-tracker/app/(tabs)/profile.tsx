@@ -15,10 +15,25 @@ import { useTransactions } from "@/context/TransactionContext";
 import { useGoals } from "@/context/GoalsContext";
 import { useCurrency, CURRENCIES, type CurrencyCode } from "@/context/CurrencyContext";
 import { useCategoryBudgets } from "@/context/CategoryBudgetContext";
+import { useBackup } from "@/context/BackupContext";
 import { EXPENSE_CATEGORIES } from "@/constants/categories";
 import { CategoryIcon } from "@/components/CategoryIcon";
 
 type ThemeOption = "light" | "dark" | "system";
+
+function fmtTime(iso: string): string {
+  const d = new Date(iso);
+  const now = new Date();
+  const diffMs = now.getTime() - d.getTime();
+  const diffMin = Math.floor(diffMs / 60000);
+  if (diffMin < 1) return "just now";
+  if (diffMin < 60) return `${diffMin}m ago`;
+  const diffHr = Math.floor(diffMin / 60);
+  if (diffHr < 24) return `${diffHr}h ago`;
+  const diffDay = Math.floor(diffHr / 24);
+  if (diffDay === 1) return "yesterday";
+  return d.toLocaleDateString();
+}
 
 export default function ProfileScreen() {
   const colors = useColors();
@@ -30,6 +45,7 @@ export default function ProfileScreen() {
   const { currency, setCurrency, format } = useCurrency();
   const { budgets, setBudget, removeBudget, getCategorySpent, getCategoryPercent } = useCategoryBudgets();
 
+  const { lastBackupAt, lastRestoreAt, isBackingUp, isRestoring, backup, restore } = useBackup();
   const [editingUsername, setEditingUsername]   = useState(false);
   const [newUsername,     setNewUsername]       = useState(user?.username ?? "");
   const [editingBudget,   setEditingBudget]     = useState(false);
@@ -74,6 +90,38 @@ export default function ProfileScreen() {
     Alert.alert("Success", "Password changed successfully");
     setChangingPass(false);
     setCurrentPass(""); setNewPass(""); setConfirmPass("");
+  }
+
+  async function handleBackup() {
+    const result = await backup();
+    if (result.success) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      Alert.alert("Backup Saved ✓", result.message);
+    } else {
+      Alert.alert("Backup Failed", result.message);
+    }
+  }
+
+  async function handleRestore() {
+    Alert.alert(
+      "Restore from Cloud",
+      "This will overwrite your local data with the cloud backup. Continue?",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Restore",
+          onPress: async () => {
+            const result = await restore();
+            if (result.success) {
+              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+              Alert.alert("Restored ✓", `${result.message}. Please restart the app to see changes.`);
+            } else {
+              Alert.alert("Restore Failed", result.message);
+            }
+          },
+        },
+      ]
+    );
   }
 
   async function handleLogout() {
@@ -325,6 +373,54 @@ export default function ProfileScreen() {
           ))}
         </Section>
 
+        {/* Cloud Backup */}
+        <Section>
+          <SectionRow icon="cloud-outline" title="Cloud Backup" />
+          <View style={styles.backupStatus}>
+            <View style={styles.backupStatusItem}>
+              <Ionicons name="cloud-upload-outline" size={14} color={lastBackupAt ? "#00B894" : colors.mutedForeground} />
+              <Text style={[styles.backupStatusText, { color: lastBackupAt ? "#00B894" : colors.mutedForeground }]}>
+                {lastBackupAt ? `Backed up ${fmtTime(lastBackupAt)}` : "Never backed up"}
+              </Text>
+            </View>
+            {lastRestoreAt && (
+              <View style={styles.backupStatusItem}>
+                <Ionicons name="cloud-download-outline" size={14} color="#74B9FF" />
+                <Text style={[styles.backupStatusText, { color: "#74B9FF" }]}>
+                  Restored {fmtTime(lastRestoreAt)}
+                </Text>
+              </View>
+            )}
+          </View>
+          <View style={styles.backupBtnRow}>
+            <TouchableOpacity
+              onPress={handleBackup}
+              disabled={isBackingUp || isRestoring}
+              style={[styles.backupBtn, { flex: 1, opacity: isBackingUp ? 0.7 : 1 }]}
+              activeOpacity={0.85}
+            >
+              <LinearGradient colors={["#00B894", "#00CEC9"]} style={styles.backupBtnGrad} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}>
+                <Ionicons name={isBackingUp ? "hourglass-outline" : "cloud-upload"} size={16} color="#fff" />
+                <Text style={styles.backupBtnText}>{isBackingUp ? "Saving…" : "Back Up Now"}</Text>
+              </LinearGradient>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={handleRestore}
+              disabled={isBackingUp || isRestoring}
+              style={[styles.backupBtn, { flex: 1, opacity: isRestoring ? 0.7 : 1 }]}
+              activeOpacity={0.85}
+            >
+              <LinearGradient colors={["#6C5CE7", "#A29BFE"]} style={styles.backupBtnGrad} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}>
+                <Ionicons name={isRestoring ? "hourglass-outline" : "cloud-download"} size={16} color="#fff" />
+                <Text style={styles.backupBtnText}>{isRestoring ? "Restoring…" : "Restore Data"}</Text>
+              </LinearGradient>
+            </TouchableOpacity>
+          </View>
+          <Text style={[styles.hint, { color: colors.mutedForeground }]}>
+            Backs up all transactions, goals, budgets & currency preference
+          </Text>
+        </Section>
+
         {/* Premium CTA */}
         <TouchableOpacity onPress={() => router.push("/(tabs)/payment")} activeOpacity={0.85}>
           <LinearGradient colors={["#4834D4", "#6C5CE7"]} style={styles.upgradeBanner} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}>
@@ -430,6 +526,13 @@ const styles = StyleSheet.create({
   infoRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingVertical: 6 },
   infoLabel: { fontSize: 14, fontFamily: "Inter_400Regular" },
   infoValue: { fontSize: 13, fontFamily: "Inter_500Medium", maxWidth: "60%", textAlign: "right" },
+  backupStatus: { gap: 4, marginBottom: 12 },
+  backupStatusItem: { flexDirection: "row", alignItems: "center", gap: 6 },
+  backupStatusText: { fontSize: 12, fontFamily: "Inter_400Regular" },
+  backupBtnRow: { flexDirection: "row", gap: 10, marginBottom: 8 },
+  backupBtn: { borderRadius: 12, overflow: "hidden" },
+  backupBtnGrad: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, paddingVertical: 12, paddingHorizontal: 14 },
+  backupBtnText: { color: "#fff", fontSize: 13, fontFamily: "Inter_600SemiBold" },
   divider: { height: 1, marginVertical: 2 },
   upgradeBanner: { borderRadius: 16, padding: 16, flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 12 },
   upgradeTitle: { color: "#fff", fontSize: 15, fontFamily: "Inter_700Bold" },

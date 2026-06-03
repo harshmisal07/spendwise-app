@@ -1,20 +1,16 @@
-// Export your models here. Add one export per file
-// export * from "./posts";
-//
-// Each model/table should ideally be split into different files.
-// Each model/table should define a Drizzle table, insert schema, and types:
-//
-//   import { pgTable, text, serial } from "drizzle-orm/pg-core";
-//   import { createInsertSchema } from "drizzle-zod";
-//   import { z } from "zod/v4";
-//
-//   export const postsTable = pgTable("posts", {
-//     id: serial("id").primaryKey(),
-//     title: text("title").notNull(),
-//   });
-//
-//   export const insertPostSchema = createInsertSchema(postsTable).omit({ id: true });
-//   export type InsertPost = z.infer<typeof insertPostSchema>;
-//   export type Post = typeof postsTable.$inferSelect;
+import { jsonb, pgTable, text, timestamp } from "drizzle-orm/pg-core";
+import { createInsertSchema } from "drizzle-zod";
+import { z } from "zod/v4";
 
-export {}
+export const cloudBackupsTable = pgTable("cloud_backups", {
+  userId:          text("user_id").primaryKey(),
+  transactions:    jsonb("transactions").notNull().default([]),
+  goals:           jsonb("goals").notNull().default([]),
+  categoryBudgets: jsonb("category_budgets").notNull().default([]),
+  currency:        text("currency").notNull().default("INR"),
+  backedUpAt:      timestamp("backed_up_at").notNull().defaultNow(),
+});
+
+export const insertCloudBackupSchema = createInsertSchema(cloudBackupsTable).omit({ backedUpAt: true });
+export type InsertCloudBackup = z.infer<typeof insertCloudBackupSchema>;
+export type CloudBackup = typeof cloudBackupsTable.$inferSelect;

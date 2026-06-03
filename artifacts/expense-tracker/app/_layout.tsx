@@ -10,13 +10,20 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { ThemeProvider } from "@/context/ThemeContext";
 import { AuthProvider } from "@/context/AuthContext";
+import { useAuth } from "@/context/AuthContext";
 import { CurrencyProvider } from "@/context/CurrencyContext";
 import { TransactionProvider } from "@/context/TransactionContext";
 import { GoalsProvider } from "@/context/GoalsContext";
 import { CategoryBudgetProvider } from "@/context/CategoryBudgetContext";
+import { BackupProvider } from "@/context/BackupContext";
 
 SplashScreen.preventAutoHideAsync();
 const queryClient = new QueryClient();
+
+function AuthenticatedProviders({ children }: { children: React.ReactNode }) {
+  const { user } = useAuth();
+  return <BackupProvider userId={user?.id ?? null}>{children}</BackupProvider>;
+}
 
 function RootLayoutNav() {
   return (
@@ -51,9 +58,11 @@ export default function RootLayout() {
                 <TransactionProvider>
                   <GoalsProvider>
                     <CategoryBudgetProvider>
-                      <GestureHandlerRootView style={{ flex: 1 }}>
-                        <RootLayoutNav />
-                      </GestureHandlerRootView>
+                      <AuthenticatedProviders>
+                        <GestureHandlerRootView style={{ flex: 1 }}>
+                          <RootLayoutNav />
+                        </GestureHandlerRootView>
+                      </AuthenticatedProviders>
                     </CategoryBudgetProvider>
                   </GoalsProvider>
                 </TransactionProvider>
