@@ -1,11 +1,11 @@
 {
   "expo": {
-    "name": "Expense Tracker",
+    "name": "SpendWise",
     "slug": "expense-tracker",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "expense-tracker",
+    "scheme": "expensetracker",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "splash": {
@@ -14,13 +14,28 @@
       "backgroundColor": "#0D0D1A"
     },
     "ios": {
-      "supportsTablet": false
+      "supportsTablet": false,
+      "bundleIdentifier": "com.harshwardhan.expensetracker",
+      "buildNumber": "1"
     },
     "android": {
-      "package": "com.something.app"
+      "package": "com.harshwardhan.expensetracker",
+      "versionCode": 1,
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/images/icon.png",
+        "backgroundColor": "#0D0D1A"
+      },
+      "splash": {
+        "image": "./assets/images/icon.png",
+        "resizeMode": "contain",
+        "backgroundColor": "#0D0D1A"
+      },
+      "permissions": [],
+      "softwareKeyboardLayoutMode": "pan"
     },
     "web": {
-      "favicon": "./assets/images/icon.png"
+      "favicon": "./assets/images/icon.png",
+      "bundler": "metro"
     },
     "plugins": [
       [
@@ -35,6 +50,11 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "extra": {
+      "eas": {
+        "projectId": "expense-tracker"
+      }
     }
   }
 }
