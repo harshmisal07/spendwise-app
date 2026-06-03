@@ -1,10 +1,11 @@
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import React, { useMemo, useState } from "react";
-import { Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { Alert, Platform, ScrollView, Share, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { CATEGORIES, getCategoryById } from "@/constants/categories";
 import { useTransactions } from "@/context/TransactionContext";
+import { useAuth } from "@/context/AuthContext";
 import { useColors } from "@/hooks/useColors";
 import { PieChart } from "@/components/PieChart";
 
@@ -13,10 +14,18 @@ type Period = "weekly" | "monthly";
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
+function fmt(n: number) {
+  return `₹${n.toLocaleString("en-IN", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+}
+function fmtFull(n: number) {
+  return `₹${n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
 export default function AnalyticsScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
-  const { transactions, totalIncome, totalExpenses, balance } = useTransactions();
+  const { user } = useAuth();
+  const { transactions, totalIncome, totalExpenses, balance, thisMonthIncome, thisMonthExpenses } = useTransactions();
   const [period, setPeriod] = useState<Period>("monthly");
 
   const topPad = Platform.OS === "web" ? 67 : insets.top;
@@ -29,10 +38,7 @@ export default function AnalyticsScreen() {
       byCategory[t.category] = (byCategory[t.category] ?? 0) + t.amount;
     });
     return Object.entries(byCategory)
-      .map(([id, value]) => {
-        const cat = getCategoryById(id);
-        return { value, color: cat.color, label: cat.name };
-      })
+      .map(([id, value]) => { const cat = getCategoryById(id); return { value, color: cat.color, label: cat.name }; })
       .sort((a, b) => b.value - a.value)
       .slice(0, 6);
   }, [transactions]);
@@ -42,12 +48,10 @@ export default function AnalyticsScreen() {
       return Array.from({ length: 6 }, (_, i) => {
         const d = new Date(now.getFullYear(), now.getMonth() - (5 - i), 1);
         const filter = (type: string) =>
-          transactions
-            .filter((t) => {
-              const td = new Date(t.date + "T12:00:00");
-              return t.type === type && td.getMonth() === d.getMonth() && td.getFullYear() === d.getFullYear();
-            })
-            .reduce((s, t) => s + t.amount, 0);
+          transactions.filter((t) => {
+            const td = new Date(t.date + "T12:00:00");
+            return t.type === type && td.getMonth() === d.getMonth() && td.getFullYear() === d.getFullYear();
+          }).reduce((s, t) => s + t.amount, 0);
         return { label: MONTHS[d.getMonth()], income: filter("income"), expense: filter("expense") };
       });
     }
@@ -55,12 +59,10 @@ export default function AnalyticsScreen() {
       const d = new Date();
       d.setDate(d.getDate() - (6 - i));
       const filter = (type: string) =>
-        transactions
-          .filter((t) => {
-            const td = new Date(t.date + "T12:00:00");
-            return t.type === type && td.toDateString() === d.toDateString();
-          })
-          .reduce((s, t) => s + t.amount, 0);
+        transactions.filter((t) => {
+          const td = new Date(t.date + "T12:00:00");
+          return t.type === type && td.toDateString() === d.toDateString();
+        }).reduce((s, t) => s + t.amount, 0);
       return { label: DAYS[d.getDay()], income: filter("income"), expense: filter("expense") };
     });
   }, [transactions, period]);
@@ -80,19 +82,70 @@ export default function AnalyticsScreen() {
 
   const savingsRate = totalIncome > 0 ? ((totalIncome - totalExpenses) / totalIncome) * 100 : 0;
 
+  function handleExportReport() {
+    const monthName = MONTHS[now.getMonth()];
+    const year = now.getFullYear();
+    const topCatLines = topCategories.slice(0, 5).map((c, i) => `  ${i + 1}. ${c.cat.name}: ${fmtFull(c.amount)}`).join("\n");
+    const report = `
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📊 SpendWise Monthly Report
+${monthName} ${year} · ${user?.username ?? "User"}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+💰 SUMMARY
+  Total Income:    ${fmtFull(totalIncome)}
+  Total Expenses:  ${fmtFull(totalExpenses)}
+  Net Balance:     ${fmtFull(balance)}
+  Savings Rate:    ${Math.max(savingsRate, 0).toFixed(1)}%
+
+📅 THIS MONTH
+  Income:    ${fmtFull(thisMonthIncome)}
+  Expenses:  ${fmtFull(thisMonthExpenses)}
+  Net:       ${fmtFull(thisMonthIncome - thisMonthExpenses)}
+
+🏷 TOP EXPENSE CATEGORIES
+${topCatLines || "  No expenses recorded"}
+
+📈 TRANSACTIONS
+  Total: ${transactions.length}
+  Income entries: ${transactions.filter((t) => t.type === "income").length}
+  Expense entries: ${transactions.filter((t) => t.type === "expense").length}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Generated by SpendWise
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+`.trim();
+
+    if (Platform.OS === "web") {
+      Alert.alert("Monthly Report", report);
+    } else {
+      Share.share({ message: report, title: `SpendWise Report - ${monthName} ${year}` });
+    }
+  }
+
   return (
     <ScrollView
       style={{ flex: 1, backgroundColor: colors.background }}
       contentContainerStyle={[styles.scroll, { paddingTop: topPad + 8, paddingBottom: bottomPad }]}
       showsVerticalScrollIndicator={false}
     >
-      <Text style={[styles.pageTitle, { color: colors.foreground }]}>Analytics</Text>
+      {/* Header */}
+      <View style={styles.headerRow}>
+        <Text style={[styles.pageTitle, { color: colors.foreground }]}>Analytics</Text>
+        <TouchableOpacity
+          onPress={handleExportReport}
+          style={[styles.exportBtn, { backgroundColor: colors.card, borderColor: colors.border }]}
+        >
+          <Ionicons name="share-outline" size={16} color="#6C5CE7" />
+          <Text style={[styles.exportText, { color: "#6C5CE7" }]}>Export</Text>
+        </TouchableOpacity>
+      </View>
 
       {/* Quick Stats */}
       <View style={styles.statsRow}>
         {[
-          { label: "Income", value: `$${totalIncome.toFixed(0)}`, color: "#00B894", icon: "arrow-up-circle" },
-          { label: "Expenses", value: `$${totalExpenses.toFixed(0)}`, color: "#FF6B6B", icon: "arrow-down-circle" },
+          { label: "Income", value: fmt(totalIncome), color: "#00B894", icon: "arrow-up-circle" },
+          { label: "Expenses", value: fmt(totalExpenses), color: "#FF6B6B", icon: "arrow-down-circle" },
           { label: "Savings %", value: `${Math.max(savingsRate, 0).toFixed(0)}%`, color: "#74B9FF", icon: "trending-up" },
         ].map((s) => (
           <View key={s.label} style={[styles.statCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
@@ -105,14 +158,36 @@ export default function AnalyticsScreen() {
         ))}
       </View>
 
+      {/* This Month Summary */}
+      <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
+        <Text style={[styles.cardTitle, { color: colors.foreground }]}>
+          {MONTHS[now.getMonth()]} {now.getFullYear()} · Monthly Report
+        </Text>
+        <View style={styles.monthRow}>
+          <View style={styles.monthItem}>
+            <View style={[styles.monthDot, { backgroundColor: "#00B894" }]} />
+            <Text style={[styles.monthLabel, { color: colors.mutedForeground }]}>Income</Text>
+            <Text style={[styles.monthValue, { color: "#00B894" }]}>{fmt(thisMonthIncome)}</Text>
+          </View>
+          <View style={styles.monthItem}>
+            <View style={[styles.monthDot, { backgroundColor: "#FF6B6B" }]} />
+            <Text style={[styles.monthLabel, { color: colors.mutedForeground }]}>Expenses</Text>
+            <Text style={[styles.monthValue, { color: "#FF6B6B" }]}>{fmt(thisMonthExpenses)}</Text>
+          </View>
+          <View style={styles.monthItem}>
+            <View style={[styles.monthDot, { backgroundColor: "#6C5CE7" }]} />
+            <Text style={[styles.monthLabel, { color: colors.mutedForeground }]}>Net</Text>
+            <Text style={[styles.monthValue, { color: (thisMonthIncome - thisMonthExpenses) >= 0 ? "#00B894" : "#FF6B6B" }]}>
+              {(thisMonthIncome - thisMonthExpenses) >= 0 ? "+" : ""}{fmt(thisMonthIncome - thisMonthExpenses)}
+            </Text>
+          </View>
+        </View>
+      </View>
+
       {/* Period Toggle */}
       <View style={[styles.segment, { backgroundColor: colors.muted }]}>
         {(["monthly", "weekly"] as Period[]).map((p) => (
-          <TouchableOpacity
-            key={p}
-            onPress={() => setPeriod(p)}
-            style={[styles.segBtn, period === p && styles.segBtnActive]}
-          >
+          <TouchableOpacity key={p} onPress={() => setPeriod(p)} style={[styles.segBtn, period === p && styles.segBtnActive]}>
             {period === p ? (
               <LinearGradient colors={["#4834D4", "#6C5CE7"]} style={styles.segGrad} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}>
                 <Text style={styles.segTextActive}>{p.charAt(0).toUpperCase() + p.slice(1)}</Text>
@@ -127,7 +202,7 @@ export default function AnalyticsScreen() {
       {/* Bar Chart */}
       <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
         <Text style={[styles.cardTitle, { color: colors.foreground }]}>
-          {period === "monthly" ? "Last 6 Months" : "Last 7 Days"}
+          {period === "monthly" ? "Income vs Expense — Last 6 Months" : "Income vs Expense — Last 7 Days"}
         </Text>
         {barData.every((d) => d.income === 0 && d.expense === 0) ? (
           <View style={styles.chartEmpty}>
@@ -140,32 +215,16 @@ export default function AnalyticsScreen() {
               {barData.map((d, i) => (
                 <View key={i} style={styles.barGroup}>
                   <View style={styles.bars}>
-                    <View
-                      style={[
-                        styles.bar,
-                        { height: Math.max((d.income / maxBar) * 110, d.income > 0 ? 4 : 0), backgroundColor: "#00B894" },
-                      ]}
-                    />
-                    <View
-                      style={[
-                        styles.bar,
-                        { height: Math.max((d.expense / maxBar) * 110, d.expense > 0 ? 4 : 0), backgroundColor: "#FF6B6B" },
-                      ]}
-                    />
+                    <View style={[styles.bar, { height: Math.max((d.income / maxBar) * 110, d.income > 0 ? 4 : 0), backgroundColor: "#00B894" }]} />
+                    <View style={[styles.bar, { height: Math.max((d.expense / maxBar) * 110, d.expense > 0 ? 4 : 0), backgroundColor: "#FF6B6B" }]} />
                   </View>
                   <Text style={[styles.barLabel, { color: colors.mutedForeground }]}>{d.label}</Text>
                 </View>
               ))}
             </View>
             <View style={styles.barLegend}>
-              <View style={styles.legendItem}>
-                <View style={[styles.legendDot, { backgroundColor: "#00B894" }]} />
-                <Text style={[styles.legendText, { color: colors.mutedForeground }]}>Income</Text>
-              </View>
-              <View style={styles.legendItem}>
-                <View style={[styles.legendDot, { backgroundColor: "#FF6B6B" }]} />
-                <Text style={[styles.legendText, { color: colors.mutedForeground }]}>Expense</Text>
-              </View>
+              <View style={styles.legendItem}><View style={[styles.legendDot, { backgroundColor: "#00B894" }]} /><Text style={[styles.legendText, { color: colors.mutedForeground }]}>Income</Text></View>
+              <View style={styles.legendItem}><View style={[styles.legendDot, { backgroundColor: "#FF6B6B" }]} /><Text style={[styles.legendText, { color: colors.mutedForeground }]}>Expense</Text></View>
             </View>
           </>
         )}
@@ -176,29 +235,21 @@ export default function AnalyticsScreen() {
         <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
           <Text style={[styles.cardTitle, { color: colors.foreground }]}>Expense Breakdown</Text>
           <View style={styles.pieWrap}>
-            <PieChart
-              data={pieData}
-              size={200}
-              centerLabel="Total"
-              centerValue={`$${totalExpenses.toFixed(0)}`}
-            />
+            <PieChart data={pieData} size={200} centerLabel="Total" centerValue={fmt(totalExpenses)} />
           </View>
-          {/* Pie legend */}
           <View style={styles.pieLegend}>
             {pieData.map((d) => (
               <View key={d.label} style={styles.pieLegendItem}>
                 <View style={[styles.legendDot, { backgroundColor: d.color }]} />
                 <Text style={[styles.legendText, { color: colors.mutedForeground, flex: 1 }]} numberOfLines={1}>{d.label}</Text>
-                <Text style={[styles.legendText, { color: colors.foreground, fontFamily: "Inter_600SemiBold" }]}>
-                  ${d.value.toFixed(0)}
-                </Text>
+                <Text style={[styles.legendText, { color: colors.foreground, fontFamily: "Inter_600SemiBold" }]}>{fmt(d.value)}</Text>
               </View>
             ))}
           </View>
         </View>
       )}
 
-      {/* Spending by Category */}
+      {/* Category Breakdown */}
       <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
         <Text style={[styles.cardTitle, { color: colors.foreground }]}>Spending by Category</Text>
         {topCategories.length === 0 ? (
@@ -214,23 +265,12 @@ export default function AnalyticsScreen() {
                 <View key={c.id}>
                   <View style={styles.catRow}>
                     <View style={[styles.catDot, { backgroundColor: c.cat.color }]} />
-                    <Text style={[styles.catName, { color: colors.foreground }]} numberOfLines={1}>
-                      {c.cat.name}
-                    </Text>
-                    <Text style={[styles.catAmount, { color: "#FF6B6B" }]}>
-                      ${c.amount.toFixed(2)}
-                    </Text>
-                    <Text style={[styles.catPct, { color: colors.mutedForeground }]}>
-                      {pct.toFixed(0)}%
-                    </Text>
+                    <Text style={[styles.catName, { color: colors.foreground }]} numberOfLines={1}>{c.cat.name}</Text>
+                    <Text style={[styles.catAmount, { color: "#FF6B6B" }]}>{fmt(c.amount)}</Text>
+                    <Text style={[styles.catPct, { color: colors.mutedForeground }]}>{pct.toFixed(0)}%</Text>
                   </View>
                   <View style={[styles.catBarBg, { backgroundColor: colors.muted }]}>
-                    <View
-                      style={[
-                        styles.catBarFill,
-                        { width: `${pct}%`, backgroundColor: c.cat.color },
-                      ]}
-                    />
+                    <View style={[styles.catBarFill, { width: `${pct}%`, backgroundColor: c.cat.color }]} />
                   </View>
                 </View>
               );
@@ -239,39 +279,30 @@ export default function AnalyticsScreen() {
         )}
       </View>
 
-      {/* Income vs Expense Summary */}
+      {/* All-time Summary */}
       <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
-        <Text style={[styles.cardTitle, { color: colors.foreground }]}>Income vs Expense</Text>
+        <Text style={[styles.cardTitle, { color: colors.foreground }]}>All-Time Summary</Text>
         <View style={styles.vsRow}>
           <View style={styles.vsItem}>
             <Text style={[styles.vsLabel, { color: colors.mutedForeground }]}>Income</Text>
-            <Text style={[styles.vsAmount, { color: "#00B894" }]}>${totalIncome.toFixed(2)}</Text>
+            <Text style={[styles.vsAmount, { color: "#00B894" }]}>{fmtFull(totalIncome)}</Text>
           </View>
           <View style={[styles.vsDivider, { backgroundColor: colors.border }]} />
           <View style={styles.vsItem}>
             <Text style={[styles.vsLabel, { color: colors.mutedForeground }]}>Expense</Text>
-            <Text style={[styles.vsAmount, { color: "#FF6B6B" }]}>${totalExpenses.toFixed(2)}</Text>
+            <Text style={[styles.vsAmount, { color: "#FF6B6B" }]}>{fmtFull(totalExpenses)}</Text>
           </View>
           <View style={[styles.vsDivider, { backgroundColor: colors.border }]} />
           <View style={styles.vsItem}>
             <Text style={[styles.vsLabel, { color: colors.mutedForeground }]}>Net</Text>
             <Text style={[styles.vsAmount, { color: balance >= 0 ? "#00B894" : "#FF6B6B" }]}>
-              {balance >= 0 ? "+" : ""}${balance.toFixed(2)}
+              {balance >= 0 ? "+" : ""}{fmtFull(balance)}
             </Text>
           </View>
         </View>
-        {/* Progress bar */}
         {(totalIncome + totalExpenses) > 0 && (
           <View style={[styles.vsBar, { backgroundColor: "#FF6B6B33" }]}>
-            <View
-              style={[
-                styles.vsBarFill,
-                {
-                  width: `${(totalIncome / (totalIncome + totalExpenses)) * 100}%`,
-                  backgroundColor: "#00B894",
-                },
-              ]}
-            />
+            <View style={[styles.vsBarFill, { width: `${(totalIncome / (totalIncome + totalExpenses)) * 100}%`, backgroundColor: "#00B894" }]} />
           </View>
         )}
       </View>
@@ -281,26 +312,28 @@ export default function AnalyticsScreen() {
 
 const styles = StyleSheet.create({
   scroll: { paddingHorizontal: 16 },
-  pageTitle: { fontSize: 26, fontFamily: "Inter_700Bold", marginBottom: 16 },
+  headerRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 16 },
+  pageTitle: { fontSize: 26, fontFamily: "Inter_700Bold" },
+  exportBtn: { flexDirection: "row", alignItems: "center", gap: 6, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8, borderWidth: 1 },
+  exportText: { fontSize: 13, fontFamily: "Inter_600SemiBold" },
   statsRow: { flexDirection: "row", gap: 10, marginBottom: 16 },
-  statCard: {
-    flex: 1, borderRadius: 16, padding: 14,
-    borderWidth: 1, alignItems: "flex-start", gap: 4,
-  },
-  statIcon: {
-    width: 30, height: 30, borderRadius: 10,
-    alignItems: "center", justifyContent: "center", marginBottom: 2,
-  },
-  statValue: { fontSize: 17, fontFamily: "Inter_700Bold" },
+  statCard: { flex: 1, borderRadius: 16, padding: 14, borderWidth: 1, alignItems: "flex-start", gap: 4 },
+  statIcon: { width: 30, height: 30, borderRadius: 10, alignItems: "center", justifyContent: "center", marginBottom: 2 },
+  statValue: { fontSize: 15, fontFamily: "Inter_700Bold" },
   statLabel: { fontSize: 11, fontFamily: "Inter_400Regular" },
+  card: { borderRadius: 20, padding: 20, borderWidth: 1, marginBottom: 16 },
+  cardTitle: { fontSize: 16, fontFamily: "Inter_700Bold", marginBottom: 16 },
+  monthRow: { flexDirection: "row", gap: 4 },
+  monthItem: { flex: 1, alignItems: "center", gap: 4 },
+  monthDot: { width: 8, height: 8, borderRadius: 4 },
+  monthLabel: { fontSize: 11, fontFamily: "Inter_400Regular" },
+  monthValue: { fontSize: 14, fontFamily: "Inter_700Bold" },
   segment: { flexDirection: "row", borderRadius: 14, padding: 4, marginBottom: 16 },
   segBtn: { flex: 1, borderRadius: 10, overflow: "hidden" },
   segBtnActive: {},
   segGrad: { alignItems: "center", justifyContent: "center", paddingVertical: 10, borderRadius: 10 },
   segTextActive: { fontSize: 14, fontFamily: "Inter_600SemiBold", color: "#fff" },
   segTextInactive: { fontSize: 14, fontFamily: "Inter_500Medium", textAlign: "center", paddingVertical: 10 },
-  card: { borderRadius: 20, padding: 20, borderWidth: 1, marginBottom: 16 },
-  cardTitle: { fontSize: 16, fontFamily: "Inter_700Bold", marginBottom: 16 },
   barChart: { flexDirection: "row", alignItems: "flex-end", height: 130, gap: 2 },
   barGroup: { flex: 1, alignItems: "center", gap: 6 },
   bars: { flexDirection: "row", alignItems: "flex-end", gap: 2, height: 110 },
@@ -325,7 +358,7 @@ const styles = StyleSheet.create({
   vsRow: { flexDirection: "row", alignItems: "center", marginBottom: 16 },
   vsItem: { flex: 1, alignItems: "center" },
   vsLabel: { fontSize: 12, fontFamily: "Inter_400Regular", marginBottom: 4 },
-  vsAmount: { fontSize: 16, fontFamily: "Inter_700Bold" },
+  vsAmount: { fontSize: 14, fontFamily: "Inter_700Bold" },
   vsDivider: { width: 1, height: 40 },
   vsBar: { height: 8, borderRadius: 4, overflow: "hidden" },
   vsBarFill: { height: "100%", borderRadius: 4 },

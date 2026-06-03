@@ -3,6 +3,7 @@ import React, { createContext, useCallback, useContext, useEffect, useState } fr
 import { useAuth } from "./AuthContext";
 
 export type TransactionType = "income" | "expense";
+export type RecurringInterval = "none" | "daily" | "weekly" | "monthly";
 
 export type Transaction = {
   id: string;
@@ -12,6 +13,7 @@ export type Transaction = {
   date: string;
   notes: string;
   createdAt: string;
+  recurring?: RecurringInterval;
 };
 
 type TransactionContextType = {
@@ -25,6 +27,11 @@ type TransactionContextType = {
   balance: number;
   savings: number;
   isOverBudget: boolean;
+  todayExpenses: number;
+  thisMonthIncome: number;
+  thisMonthExpenses: number;
+  budgetRemaining: number;
+  budgetPercent: number;
 };
 
 const TransactionContext = createContext<TransactionContextType | undefined>(undefined);
@@ -33,30 +40,31 @@ function getStorageKey(userId: string) {
   return `@expense_transactions_${userId}`;
 }
 
+function isSameDay(dateStr: string, ref: Date) {
+  const d = new Date(dateStr + "T12:00:00");
+  return d.getFullYear() === ref.getFullYear() && d.getMonth() === ref.getMonth() && d.getDate() === ref.getDate();
+}
+
+function isSameMonth(dateStr: string, ref: Date) {
+  const d = new Date(dateStr + "T12:00:00");
+  return d.getFullYear() === ref.getFullYear() && d.getMonth() === ref.getMonth();
+}
+
 export function TransactionProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   const loadTransactions = useCallback(async () => {
-    if (!user) {
-      setTransactions([]);
-      setIsLoading(false);
-      return;
-    }
+    if (!user) { setTransactions([]); setIsLoading(false); return; }
     try {
       const stored = await AsyncStorage.getItem(getStorageKey(user.id));
       setTransactions(stored ? JSON.parse(stored) : []);
-    } catch {
-      setTransactions([]);
-    }
+    } catch { setTransactions([]); }
     setIsLoading(false);
   }, [user]);
 
-  useEffect(() => {
-    setIsLoading(true);
-    loadTransactions();
-  }, [loadTransactions]);
+  useEffect(() => { setIsLoading(true); loadTransactions(); }, [loadTransactions]);
 
   async function persist(updated: Transaction[]) {
     if (!user) return;
@@ -74,39 +82,43 @@ export function TransactionProvider({ children }: { children: React.ReactNode })
   }
 
   async function updateTransaction(id: string, t: Partial<Transaction>) {
-    const updated = transactions.map((tx) => (tx.id === id ? { ...tx, ...t } : tx));
-    await persist(updated);
+    await persist(transactions.map((tx) => (tx.id === id ? { ...tx, ...t } : tx)));
   }
 
   async function deleteTransaction(id: string) {
     await persist(transactions.filter((tx) => tx.id !== id));
   }
 
-  const totalIncome = transactions
-    .filter((t) => t.type === "income")
-    .reduce((sum, t) => sum + t.amount, 0);
+  const now = new Date();
 
-  const totalExpenses = transactions
-    .filter((t) => t.type === "expense")
-    .reduce((sum, t) => sum + t.amount, 0);
-
+  const totalIncome = transactions.filter((t) => t.type === "income").reduce((s, t) => s + t.amount, 0);
+  const totalExpenses = transactions.filter((t) => t.type === "expense").reduce((s, t) => s + t.amount, 0);
   const balance = totalIncome - totalExpenses;
   const savings = balance > 0 ? balance : 0;
   const isOverBudget = user ? totalExpenses > user.budgetLimit : false;
 
+  const todayExpenses = transactions
+    .filter((t) => t.type === "expense" && isSameDay(t.date, now))
+    .reduce((s, t) => s + t.amount, 0);
+
+  const thisMonthIncome = transactions
+    .filter((t) => t.type === "income" && isSameMonth(t.date, now))
+    .reduce((s, t) => s + t.amount, 0);
+
+  const thisMonthExpenses = transactions
+    .filter((t) => t.type === "expense" && isSameMonth(t.date, now))
+    .reduce((s, t) => s + t.amount, 0);
+
+  const budgetLimit = user?.budgetLimit ?? 0;
+  const budgetRemaining = Math.max(budgetLimit - thisMonthExpenses, 0);
+  const budgetPercent = budgetLimit > 0 ? Math.min((thisMonthExpenses / budgetLimit) * 100, 100) : 0;
+
   return (
     <TransactionContext.Provider
       value={{
-        transactions,
-        isLoading,
-        addTransaction,
-        updateTransaction,
-        deleteTransaction,
-        totalIncome,
-        totalExpenses,
-        balance,
-        savings,
-        isOverBudget,
+        transactions, isLoading, addTransaction, updateTransaction, deleteTransaction,
+        totalIncome, totalExpenses, balance, savings, isOverBudget,
+        todayExpenses, thisMonthIncome, thisMonthExpenses, budgetRemaining, budgetPercent,
       }}
     >
       {children}

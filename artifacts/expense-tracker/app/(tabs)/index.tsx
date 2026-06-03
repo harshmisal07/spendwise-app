@@ -3,18 +3,11 @@ import * as Haptics from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
 import React from "react";
-import {
-  Alert,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from "react-native";
+import { Alert, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "@/context/AuthContext";
 import { useTransactions } from "@/context/TransactionContext";
+import { useGoals } from "@/context/GoalsContext";
 import { useColors } from "@/hooks/useColors";
 import { SummaryCard } from "@/components/SummaryCard";
 import { TransactionCard } from "@/components/TransactionCard";
@@ -26,18 +19,30 @@ function greet() {
   return "Good evening";
 }
 
+function fmt(n: number) {
+  return `₹${n.toLocaleString("en-IN", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+}
+
 export default function DashboardScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
-  const { transactions, totalIncome, totalExpenses, balance, savings, isOverBudget, deleteTransaction } = useTransactions();
+  const {
+    transactions, totalIncome, totalExpenses, balance, savings, deleteTransaction,
+    todayExpenses, thisMonthIncome, thisMonthExpenses, budgetRemaining, budgetPercent,
+  } = useTransactions();
+  const { goals } = useGoals();
 
-  const recent = transactions.slice(0, 8);
+  const recent = transactions.slice(0, 6);
   const topPad = Platform.OS === "web" ? 67 : insets.top;
   const fabBottom = insets.bottom + (Platform.OS === "web" ? 84 : 90);
-  const budgetPct = user?.budgetLimit ? Math.min((totalExpenses / user.budgetLimit) * 100, 100) : 0;
-
   const initials = user?.username ? user.username.slice(0, 2).toUpperCase() : "ME";
+  const previewGoals = goals.slice(0, 2);
+
+  const budgetAlert =
+    budgetPercent >= 100 ? "over" :
+    budgetPercent >= 80 ? "danger" :
+    budgetPercent >= 50 ? "warning" : null;
 
   function handleDelete(id: string) {
     Alert.alert("Delete Transaction", "Are you sure?", [
@@ -70,35 +75,75 @@ export default function DashboardScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Budget Warning */}
-        {isOverBudget && (
-          <View style={styles.warningBanner}>
-            <LinearGradient
-              colors={["#E17055", "#FDCB6E"]}
-              style={styles.warningGrad}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 0 }}
-            >
-              <Ionicons name="warning" size={18} color="#fff" />
-              <Text style={styles.warningText}>
-                Budget exceeded! ${totalExpenses.toFixed(2)} of ${(user?.budgetLimit ?? 0).toFixed(2)}
+        {/* Budget Alerts */}
+        {budgetAlert === "over" && (
+          <LinearGradient colors={["#FF6B6B", "#E17055"]} style={styles.alertBanner} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}>
+            <Ionicons name="warning" size={18} color="#fff" />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.alertTitle}>Budget Exceeded!</Text>
+              <Text style={styles.alertSub}>
+                Spent {fmt(thisMonthExpenses)} of {fmt(user?.budgetLimit ?? 0)} this month
               </Text>
-            </LinearGradient>
+            </View>
+            <Text style={styles.alertPct}>{budgetPercent.toFixed(0)}%</Text>
+          </LinearGradient>
+        )}
+        {budgetAlert === "danger" && (
+          <LinearGradient colors={["#E17055", "#FDCB6E"]} style={styles.alertBanner} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}>
+            <Ionicons name="alert-circle" size={18} color="#fff" />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.alertTitle}>Nearing Budget Limit</Text>
+              <Text style={styles.alertSub}>
+                {fmt(budgetRemaining)} remaining from {fmt(user?.budgetLimit ?? 0)}
+              </Text>
+            </View>
+            <Text style={styles.alertPct}>{budgetPercent.toFixed(0)}%</Text>
+          </LinearGradient>
+        )}
+        {budgetAlert === "warning" && (
+          <View style={[styles.alertBannerSoft, { backgroundColor: "#FDCB6E18", borderColor: "#FDCB6E40" }]}>
+            <Ionicons name="information-circle" size={16} color="#FDCB6E" />
+            <Text style={[styles.alertSoftText, { color: "#FDCB6E" }]}>
+              50% of monthly budget used · {fmt(budgetRemaining)} left
+            </Text>
           </View>
         )}
+
+        {/* Smart Stats Row */}
+        <View style={styles.smartRow}>
+          <View style={[styles.smartCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <View style={[styles.smartIcon, { backgroundColor: "#FF6B6B18" }]}>
+              <Ionicons name="today" size={14} color="#FF6B6B" />
+            </View>
+            <Text style={[styles.smartLabel, { color: colors.mutedForeground }]}>Today</Text>
+            <Text style={[styles.smartValue, { color: "#FF6B6B" }]}>{fmt(todayExpenses)}</Text>
+          </View>
+          <View style={[styles.smartCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <View style={[styles.smartIcon, { backgroundColor: "#6C5CE718" }]}>
+              <Ionicons name="calendar" size={14} color="#6C5CE7" />
+            </View>
+            <Text style={[styles.smartLabel, { color: colors.mutedForeground }]}>This Month</Text>
+            <Text style={[styles.smartValue, { color: "#6C5CE7" }]}>{fmt(thisMonthExpenses)}</Text>
+          </View>
+          <View style={[styles.smartCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <View style={[styles.smartIcon, { backgroundColor: "#00B89418" }]}>
+              <Ionicons name="shield-checkmark" size={14} color="#00B894" />
+            </View>
+            <Text style={[styles.smartLabel, { color: colors.mutedForeground }]}>Budget Left</Text>
+            <Text style={[styles.smartValue, { color: "#00B894" }]}>{fmt(budgetRemaining)}</Text>
+          </View>
+        </View>
 
         {/* Balance Card */}
         <View style={styles.balanceCard}>
           <SummaryCard title="Total Balance" amount={balance} variant="balance" />
         </View>
 
-        {/* Row cards */}
+        {/* Income / Expense / Savings */}
         <View style={styles.row}>
           <SummaryCard title="Income" amount={totalIncome} variant="income" compact />
           <SummaryCard title="Expenses" amount={totalExpenses} variant="expense" compact />
         </View>
-
-        {/* Savings + Budget row */}
         <View style={styles.row}>
           <SummaryCard title="Savings" amount={savings} variant="savings" compact />
           {user?.budgetLimit ? (
@@ -107,22 +152,64 @@ export default function DashboardScreen() {
                 <Ionicons name="shield" size={14} color="#FDCB6E" />
               </View>
               <Text style={[styles.budgetLabel, { color: colors.mutedForeground }]}>Budget</Text>
-              <Text style={[styles.budgetAmount, { color: colors.foreground }]}>${user.budgetLimit.toFixed(0)}</Text>
+              <Text style={[styles.budgetAmount, { color: colors.foreground }]}>
+                {fmt(user.budgetLimit)}
+              </Text>
               <View style={[styles.budgetTrackBg, { backgroundColor: colors.muted }]}>
                 <View
                   style={[
                     styles.budgetTrackFill,
-                    {
-                      width: `${budgetPct}%`,
-                      backgroundColor: budgetPct > 90 ? "#FF6B6B" : budgetPct > 60 ? "#FDCB6E" : "#00B894",
-                    },
+                    { width: `${budgetPercent}%`, backgroundColor: budgetPercent >= 100 ? "#FF6B6B" : budgetPercent >= 80 ? "#E17055" : budgetPercent >= 50 ? "#FDCB6E" : "#00B894" },
                   ]}
                 />
               </View>
-              <Text style={[styles.budgetPct, { color: colors.mutedForeground }]}>{budgetPct.toFixed(0)}% used</Text>
+              <Text style={[styles.budgetPct, { color: colors.mutedForeground }]}>
+                {budgetPercent.toFixed(0)}% used
+              </Text>
             </View>
           ) : null}
         </View>
+
+        {/* Savings Goals Preview */}
+        {previewGoals.length > 0 && (
+          <>
+            <View style={styles.sectionHeader}>
+              <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Savings Goals</Text>
+              <TouchableOpacity onPress={() => router.push("/(tabs)/goals")}>
+                <Text style={[styles.seeAll, { color: colors.primary }]}>Manage →</Text>
+              </TouchableOpacity>
+            </View>
+            <View style={{ gap: 10, marginBottom: 16 }}>
+              {previewGoals.map((goal) => {
+                const pct = goal.targetAmount > 0 ? Math.min((goal.savedAmount / goal.targetAmount) * 100, 100) : 0;
+                return (
+                  <TouchableOpacity
+                    key={goal.id}
+                    onPress={() => router.push("/(tabs)/goals")}
+                    style={[styles.goalCard, { backgroundColor: colors.card, borderColor: colors.border }]}
+                    activeOpacity={0.8}
+                  >
+                    <View style={[styles.goalIcon, { backgroundColor: goal.color + "20" }]}>
+                      <Ionicons name={goal.icon as any} size={18} color={goal.color} />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <View style={styles.goalTop}>
+                        <Text style={[styles.goalName, { color: colors.foreground }]} numberOfLines={1}>{goal.name}</Text>
+                        <Text style={[styles.goalAmt, { color: goal.color }]}>
+                          {fmt(goal.savedAmount)} / {fmt(goal.targetAmount)}
+                        </Text>
+                      </View>
+                      <View style={[styles.goalBarBg, { backgroundColor: colors.muted }]}>
+                        <View style={[styles.goalBarFill, { width: `${pct}%`, backgroundColor: goal.color }]} />
+                      </View>
+                      <Text style={[styles.goalPct, { color: colors.mutedForeground }]}>{pct.toFixed(0)}% saved</Text>
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </>
+        )}
 
         {/* Recent Transactions */}
         <View style={styles.sectionHeader}>
@@ -136,18 +223,11 @@ export default function DashboardScreen() {
 
         {recent.length === 0 ? (
           <View style={[styles.empty, { borderColor: colors.border }]}>
-            <LinearGradient
-              colors={["#6C5CE722", "#A29BFE22"]}
-              style={styles.emptyIconWrap}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-            >
+            <LinearGradient colors={["#6C5CE722", "#A29BFE22"]} style={styles.emptyIconWrap} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
               <Ionicons name="receipt-outline" size={32} color="#6C5CE7" />
             </LinearGradient>
             <Text style={[styles.emptyTitle, { color: colors.foreground }]}>No transactions yet</Text>
-            <Text style={[styles.emptyText, { color: colors.mutedForeground }]}>
-              Tap + to add your first transaction
-            </Text>
+            <Text style={[styles.emptyText, { color: colors.mutedForeground }]}>Tap + to add your first transaction</Text>
           </View>
         ) : (
           <View>
@@ -164,12 +244,7 @@ export default function DashboardScreen() {
         activeOpacity={0.85}
         style={[styles.fab, { bottom: fabBottom }]}
       >
-        <LinearGradient
-          colors={["#4834D4", "#6C5CE7"]}
-          style={styles.fabGrad}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-        >
+        <LinearGradient colors={["#4834D4", "#6C5CE7"]} style={styles.fabGrad} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
           <Ionicons name="add" size={30} color="#fff" />
         </LinearGradient>
       </TouchableOpacity>
@@ -179,66 +254,56 @@ export default function DashboardScreen() {
 
 const styles = StyleSheet.create({
   scroll: { paddingHorizontal: 16 },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 16,
-    paddingTop: 4,
-  },
+  header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 14, paddingTop: 4 },
   greeting: { fontSize: 13, fontFamily: "Inter_400Regular", marginBottom: 2 },
   username: { fontSize: 24, fontFamily: "Inter_700Bold" },
   avatar: {
     width: 48, height: 48, borderRadius: 24,
     alignItems: "center", justifyContent: "center",
-    shadowColor: "#6C5CE7", shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.3, shadowRadius: 6, elevation: 4,
+    shadowColor: "#6C5CE7", shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.3, shadowRadius: 6, elevation: 4,
   },
   avatarText: { color: "#fff", fontSize: 17, fontFamily: "Inter_700Bold" },
-  warningBanner: { marginBottom: 14, borderRadius: 14, overflow: "hidden" },
-  warningGrad: {
-    flexDirection: "row", alignItems: "center", gap: 8,
-    padding: 12, borderRadius: 14,
+  alertBanner: {
+    flexDirection: "row", alignItems: "center", gap: 10,
+    padding: 14, borderRadius: 14, marginBottom: 12,
   },
-  warningText: { color: "#fff", fontSize: 13, fontFamily: "Inter_500Medium", flex: 1 },
+  alertTitle: { color: "#fff", fontSize: 13, fontFamily: "Inter_700Bold" },
+  alertSub: { color: "rgba(255,255,255,0.85)", fontSize: 11, fontFamily: "Inter_400Regular", marginTop: 1 },
+  alertPct: { color: "#fff", fontSize: 18, fontFamily: "Inter_700Bold" },
+  alertBannerSoft: {
+    flexDirection: "row", alignItems: "center", gap: 8,
+    padding: 10, borderRadius: 12, marginBottom: 12, borderWidth: 1,
+  },
+  alertSoftText: { fontSize: 12, fontFamily: "Inter_500Medium", flex: 1 },
+  smartRow: { flexDirection: "row", gap: 10, marginBottom: 12 },
+  smartCard: { flex: 1, borderRadius: 16, padding: 12, borderWidth: 1, gap: 4 },
+  smartIcon: { width: 26, height: 26, borderRadius: 8, alignItems: "center", justifyContent: "center", marginBottom: 2 },
+  smartLabel: { fontSize: 10, fontFamily: "Inter_400Regular" },
+  smartValue: { fontSize: 14, fontFamily: "Inter_700Bold" },
   balanceCard: { marginBottom: 12 },
   row: { flexDirection: "row", gap: 12, marginBottom: 12 },
-  budgetCard: {
-    flex: 1, borderRadius: 18, padding: 16, borderWidth: 1, gap: 4,
-  },
-  budgetIconWrap: {
-    width: 28, height: 28, borderRadius: 14,
-    alignItems: "center", justifyContent: "center", marginBottom: 2,
-  },
+  budgetCard: { flex: 1, borderRadius: 18, padding: 16, borderWidth: 1, gap: 4 },
+  budgetIconWrap: { width: 28, height: 28, borderRadius: 14, alignItems: "center", justifyContent: "center", marginBottom: 2 },
   budgetLabel: { fontSize: 12, fontFamily: "Inter_400Regular" },
   budgetAmount: { fontSize: 18, fontFamily: "Inter_700Bold" },
   budgetTrackBg: { height: 5, borderRadius: 3, overflow: "hidden", marginVertical: 4 },
   budgetTrackFill: { height: "100%", borderRadius: 3 },
   budgetPct: { fontSize: 11, fontFamily: "Inter_400Regular" },
-  sectionHeader: {
-    flexDirection: "row", justifyContent: "space-between",
-    alignItems: "center", marginBottom: 8, marginTop: 4,
-  },
+  sectionHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 10, marginTop: 4 },
   sectionTitle: { fontSize: 18, fontFamily: "Inter_700Bold" },
   seeAll: { fontSize: 13, fontFamily: "Inter_500Medium" },
-  empty: {
-    alignItems: "center", padding: 40,
-    borderRadius: 20, borderWidth: 1,
-    borderStyle: "dashed", gap: 10,
-  },
-  emptyIconWrap: {
-    width: 72, height: 72, borderRadius: 24,
-    alignItems: "center", justifyContent: "center",
-  },
+  goalCard: { flexDirection: "row", alignItems: "center", gap: 12, borderRadius: 16, padding: 14, borderWidth: 1 },
+  goalIcon: { width: 40, height: 40, borderRadius: 12, alignItems: "center", justifyContent: "center" },
+  goalTop: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 6 },
+  goalName: { fontSize: 14, fontFamily: "Inter_600SemiBold", flex: 1 },
+  goalAmt: { fontSize: 12, fontFamily: "Inter_600SemiBold" },
+  goalBarBg: { height: 5, borderRadius: 3, overflow: "hidden", marginBottom: 4 },
+  goalBarFill: { height: "100%", borderRadius: 3 },
+  goalPct: { fontSize: 10, fontFamily: "Inter_400Regular" },
+  empty: { alignItems: "center", padding: 40, borderRadius: 20, borderWidth: 1, borderStyle: "dashed", gap: 10 },
+  emptyIconWrap: { width: 72, height: 72, borderRadius: 24, alignItems: "center", justifyContent: "center" },
   emptyTitle: { fontSize: 16, fontFamily: "Inter_600SemiBold" },
   emptyText: { fontSize: 13, fontFamily: "Inter_400Regular", textAlign: "center" },
-  fab: {
-    position: "absolute", right: 20,
-    shadowColor: "#6C5CE7", shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.4, shadowRadius: 16, elevation: 10,
-  },
-  fabGrad: {
-    width: 62, height: 62, borderRadius: 31,
-    alignItems: "center", justifyContent: "center",
-  },
+  fab: { position: "absolute", right: 20, shadowColor: "#6C5CE7", shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.4, shadowRadius: 16, elevation: 10 },
+  fabGrad: { width: 62, height: 62, borderRadius: 31, alignItems: "center", justifyContent: "center" },
 });

@@ -2,7 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { BlurView } from "expo-blur";
 import { Tabs } from "expo-router";
 import React from "react";
-import { Platform, StyleSheet, View } from "react-native";
+import { Platform, StyleSheet } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useColors } from "@/hooks/useColors";
 import { useTheme } from "@/context/ThemeContext";
@@ -38,10 +38,7 @@ export default function TabLayout() {
               />
             )
           : undefined,
-        tabBarLabelStyle: {
-          fontSize: 10,
-          fontFamily: "Inter_500Medium",
-        },
+        tabBarLabelStyle: { fontSize: 10, fontFamily: "Inter_500Medium" },
       }}
     >
       <Tabs.Screen
@@ -54,11 +51,11 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="analytics"
+        name="goals"
         options={{
-          title: "Analytics",
+          title: "Goals",
           tabBarIcon: ({ color, focused }) => (
-            <Ionicons name={focused ? "bar-chart" : "bar-chart-outline"} size={22} color={color} />
+            <Ionicons name={focused ? "trophy" : "trophy-outline"} size={22} color={color} />
           ),
         }}
       />
@@ -72,11 +69,11 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="payment"
+        name="analytics"
         options={{
-          title: "Pay",
+          title: "Analytics",
           tabBarIcon: ({ color, focused }) => (
-            <Ionicons name={focused ? "wallet" : "wallet-outline"} size={22} color={color} />
+            <Ionicons name={focused ? "bar-chart" : "bar-chart-outline"} size={22} color={color} />
           ),
         }}
       />
@@ -89,6 +86,7 @@ export default function TabLayout() {
           ),
         }}
       />
+      <Tabs.Screen name="payment" options={{ href: null }} />
     </Tabs>
   );
 }
