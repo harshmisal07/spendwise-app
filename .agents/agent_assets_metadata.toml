@@ -35,3 +35,9 @@ id = "3IqSHOgcHNek1CACON9xy"
 uri = "file://artifacts/expense-tracker/assets/images/splash.png"
 type = "image"
 title = "Splash Screen (9:16)"
+
+[[outputs]]
+id = "CrAweTDLuR0XfCFgNhBR3"
+uri = "file://SpendWise_PlayStore_Listing.md"
+type = "text"
+title = "SpendWise — Google Play Store Listing Package"
