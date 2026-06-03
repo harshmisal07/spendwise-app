@@ -10,6 +10,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { EXPENSE_CATEGORIES, INCOME_CATEGORIES } from "@/constants/categories";
 import { useTransactions } from "@/context/TransactionContext";
+import { useCurrency, CURRENCIES } from "@/context/CurrencyContext";
 import { useColors } from "@/hooks/useColors";
 import { CategoryIcon } from "@/components/CategoryIcon";
 import type { RecurringInterval } from "@/context/TransactionContext";
@@ -17,43 +18,41 @@ import type { RecurringInterval } from "@/context/TransactionContext";
 type TxType = "income" | "expense";
 
 function formatDateLabel(d: Date): string {
-  const today = new Date();
+  const today     = new Date();
   const yesterday = new Date();
   yesterday.setDate(today.getDate() - 1);
-  if (d.toDateString() === today.toDateString()) return "Today";
+  if (d.toDateString() === today.toDateString())     return "Today";
   if (d.toDateString() === yesterday.toDateString()) return "Yesterday";
   return d.toLocaleDateString("en-IN", { month: "short", day: "numeric", year: "numeric" });
 }
 
 function toISODate(d: Date): string {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
 const RECURRING_OPTIONS: { key: RecurringInterval; label: string; icon: string }[] = [
-  { key: "none", label: "Once", icon: "remove-circle-outline" },
-  { key: "daily", label: "Daily", icon: "sunny-outline" },
-  { key: "weekly", label: "Weekly", icon: "calendar-clear-outline" },
-  { key: "monthly", label: "Monthly", icon: "calendar-outline" },
+  { key: "none",    label: "Once",    icon: "remove-circle-outline"    },
+  { key: "daily",   label: "Daily",   icon: "sunny-outline"             },
+  { key: "weekly",  label: "Weekly",  icon: "calendar-clear-outline"    },
+  { key: "monthly", label: "Monthly", icon: "calendar-outline"          },
 ];
 
 export default function AddTransactionScreen() {
-  const colors = useColors();
-  const insets = useSafeAreaInsets();
-  const { addTransaction } = useTransactions();
+  const colors    = useColors();
+  const insets    = useSafeAreaInsets();
+  const { addTransaction }        = useTransactions();
+  const { currency, symbol }      = useCurrency();
 
-  const [type, setType] = useState<TxType>("expense");
-  const [amount, setAmount] = useState("");
-  const [category, setCategory] = useState("food");
-  const [date, setDate] = useState(new Date());
-  const [notes, setNotes] = useState("");
+  const [type,      setType]      = useState<TxType>("expense");
+  const [amount,    setAmount]    = useState("");
+  const [category,  setCategory]  = useState("food");
+  const [date,      setDate]      = useState(new Date());
+  const [notes,     setNotes]     = useState("");
   const [recurring, setRecurring] = useState<RecurringInterval>("none");
-  const [saving, setSaving] = useState(false);
+  const [saving,    setSaving]    = useState(false);
 
-  const catList = type === "income" ? INCOME_CATEGORIES : EXPENSE_CATEGORIES;
-  const isIncome = type === "income";
+  const catList   = type === "income" ? INCOME_CATEGORIES : EXPENSE_CATEGORIES;
+  const isIncome  = type === "income";
   const gradColors: [string, string] = isIncome ? ["#00B894", "#00CEC9"] : ["#4834D4", "#6C5CE7"];
 
   function adjustDate(days: number) {
@@ -81,16 +80,11 @@ export default function AddTransactionScreen() {
   }
 
   const bottomPad = Platform.OS === "web" ? 34 : insets.bottom;
-  const isToday = date.toDateString() === new Date().toDateString();
+  const isToday   = date.toDateString() === new Date().toDateString();
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
-      <LinearGradient
-        colors={gradColors}
-        style={[styles.header, { paddingTop: insets.top + 16 }]}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-      >
+      <LinearGradient colors={gradColors} style={[styles.header, { paddingTop: insets.top + 16 }]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
         <TouchableOpacity onPress={() => router.back()} style={styles.closeBtn}>
           <Ionicons name="close" size={22} color="rgba(255,255,255,0.9)" />
         </TouchableOpacity>
@@ -99,19 +93,12 @@ export default function AddTransactionScreen() {
       </LinearGradient>
 
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={{ flex: 1 }}>
-        <ScrollView
-          contentContainerStyle={[styles.form, { paddingBottom: bottomPad + 40 }]}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
-        >
+        <ScrollView contentContainerStyle={[styles.form, { paddingBottom: bottomPad + 40 }]} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+
           {/* Type Toggle */}
           <View style={[styles.toggle, { backgroundColor: colors.muted }]}>
             {(["expense", "income"] as TxType[]).map((t) => (
-              <TouchableOpacity
-                key={t}
-                onPress={() => { setType(t); setCategory(t === "income" ? "salary" : "food"); Haptics.selectionAsync(); }}
-                style={styles.toggleBtn}
-              >
+              <TouchableOpacity key={t} onPress={() => { setType(t); setCategory(t === "income" ? "salary" : "food"); Haptics.selectionAsync(); }} style={styles.toggleBtn}>
                 {type === t ? (
                   <LinearGradient colors={t === "income" ? ["#00B894", "#00CEC9"] : ["#4834D4", "#6C5CE7"]} style={styles.toggleGrad} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}>
                     <Ionicons name={t === "income" ? "arrow-up" : "arrow-down"} size={16} color="#fff" />
@@ -128,17 +115,14 @@ export default function AddTransactionScreen() {
 
           {/* Amount */}
           <View style={styles.amountSection}>
-            <Text style={[styles.currencySymbol, { color: colors.mutedForeground }]}>₹</Text>
+            <Text style={[styles.currencySymbol, { color: colors.mutedForeground }]}>{symbol}</Text>
             <TextInput
               style={[styles.amountInput, { color: colors.foreground }]}
-              value={amount}
-              onChangeText={setAmount}
-              keyboardType="decimal-pad"
-              placeholder="0.00"
-              placeholderTextColor={colors.border}
-              autoFocus
+              value={amount} onChangeText={setAmount}
+              keyboardType="decimal-pad" placeholder="0.00" placeholderTextColor={colors.border} autoFocus
             />
           </View>
+          <Text style={[styles.currencyLabel, { color: colors.mutedForeground }]}>{CURRENCIES[currency].name}</Text>
           <View style={[styles.amountLine, { backgroundColor: isIncome ? "#00B894" : "#6C5CE7" }]} />
 
           {/* Date */}
@@ -159,11 +143,8 @@ export default function AddTransactionScreen() {
             {catList.map((cat) => {
               const selected = category === cat.id;
               return (
-                <TouchableOpacity
-                  key={cat.id}
-                  onPress={() => { setCategory(cat.id); Haptics.selectionAsync(); }}
-                  style={[styles.catBtn, { backgroundColor: selected ? cat.color + "20" : colors.card, borderColor: selected ? cat.color : colors.border, borderWidth: selected ? 2 : 1 }]}
-                >
+                <TouchableOpacity key={cat.id} onPress={() => { setCategory(cat.id); Haptics.selectionAsync(); }}
+                  style={[styles.catBtn, { backgroundColor: selected ? cat.color + "20" : colors.card, borderColor: selected ? cat.color : colors.border, borderWidth: selected ? 2 : 1 }]}>
                   <CategoryIcon categoryId={cat.id} size={38} iconSize={19} />
                   <Text style={[styles.catBtnLabel, { color: selected ? cat.color : colors.mutedForeground, fontFamily: selected ? "Inter_600SemiBold" : "Inter_400Regular" }]} numberOfLines={1}>
                     {cat.name}
@@ -179,22 +160,10 @@ export default function AddTransactionScreen() {
             {RECURRING_OPTIONS.map((opt) => {
               const active = recurring === opt.key;
               return (
-                <TouchableOpacity
-                  key={opt.key}
-                  onPress={() => { setRecurring(opt.key); Haptics.selectionAsync(); }}
-                  style={[
-                    styles.recurringBtn,
-                    {
-                      backgroundColor: active ? "#6C5CE720" : colors.card,
-                      borderColor: active ? "#6C5CE7" : colors.border,
-                      borderWidth: active ? 2 : 1,
-                    },
-                  ]}
-                >
+                <TouchableOpacity key={opt.key} onPress={() => { setRecurring(opt.key); Haptics.selectionAsync(); }}
+                  style={[styles.recurringBtn, { backgroundColor: active ? "#6C5CE720" : colors.card, borderColor: active ? "#6C5CE7" : colors.border, borderWidth: active ? 2 : 1 }]}>
                   <Ionicons name={opt.icon as any} size={18} color={active ? "#6C5CE7" : colors.mutedForeground} />
-                  <Text style={[styles.recurringLabel, { color: active ? "#6C5CE7" : colors.mutedForeground, fontFamily: active ? "Inter_600SemiBold" : "Inter_400Regular" }]}>
-                    {opt.label}
-                  </Text>
+                  <Text style={[styles.recurringLabel, { color: active ? "#6C5CE7" : colors.mutedForeground, fontFamily: active ? "Inter_600SemiBold" : "Inter_400Regular" }]}>{opt.label}</Text>
                 </TouchableOpacity>
               );
             })}
@@ -203,7 +172,7 @@ export default function AddTransactionScreen() {
             <View style={[styles.recurringNote, { backgroundColor: "#6C5CE710", borderColor: "#6C5CE730" }]}>
               <Ionicons name="information-circle" size={14} color="#6C5CE7" />
               <Text style={[styles.recurringNoteText, { color: "#6C5CE7" }]}>
-                This transaction will repeat {recurring}. A reminder will be shown each time.
+                Repeats {recurring} · shown as a reminder on your dashboard when due
               </Text>
             </View>
           )}
@@ -212,12 +181,7 @@ export default function AddTransactionScreen() {
           <Text style={[styles.label, { color: colors.mutedForeground }]}>Notes (optional)</Text>
           <TextInput
             style={[styles.notesInput, { backgroundColor: colors.card, color: colors.foreground, borderColor: colors.border }]}
-            value={notes}
-            onChangeText={setNotes}
-            placeholder="What was this for?"
-            placeholderTextColor={colors.mutedForeground}
-            multiline
-            numberOfLines={3}
+            value={notes} onChangeText={setNotes} placeholder="What was this for?" placeholderTextColor={colors.mutedForeground} multiline numberOfLines={3}
           />
 
           {/* Save */}
@@ -243,8 +207,9 @@ const styles = StyleSheet.create({
   toggleGrad: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, paddingVertical: 13, borderRadius: 10 },
   toggleTextActive: { color: "#fff", fontSize: 15, fontFamily: "Inter_600SemiBold" },
   toggleTextInactive: { fontSize: 15, fontFamily: "Inter_500Medium" },
-  amountSection: { flexDirection: "row", alignItems: "center", justifyContent: "center", marginBottom: 4 },
+  amountSection: { flexDirection: "row", alignItems: "center", justifyContent: "center", marginBottom: 2 },
   currencySymbol: { fontSize: 32, fontFamily: "Inter_400Regular", marginRight: 4, marginTop: 8 },
+  currencyLabel: { textAlign: "center", fontSize: 11, fontFamily: "Inter_400Regular", marginBottom: 6 },
   amountInput: { fontSize: 56, fontFamily: "Inter_700Bold", textAlign: "center", minWidth: 120 },
   amountLine: { height: 3, borderRadius: 2, marginBottom: 28, marginHorizontal: 40 },
   label: { fontSize: 11, fontFamily: "Inter_600SemiBold", marginBottom: 10, textTransform: "uppercase", letterSpacing: 0.8 },

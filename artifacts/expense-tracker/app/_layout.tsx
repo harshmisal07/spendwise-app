@@ -1,9 +1,5 @@
 import {
-  Inter_400Regular,
-  Inter_500Medium,
-  Inter_600SemiBold,
-  Inter_700Bold,
-  useFonts,
+  Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold, useFonts,
 } from "@expo-google-fonts/inter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Stack } from "expo-router";
@@ -11,15 +7,15 @@ import * as SplashScreen from "expo-splash-screen";
 import React, { useEffect } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
-
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { ThemeProvider } from "@/context/ThemeContext";
 import { AuthProvider } from "@/context/AuthContext";
+import { CurrencyProvider } from "@/context/CurrencyContext";
 import { TransactionProvider } from "@/context/TransactionContext";
 import { GoalsProvider } from "@/context/GoalsContext";
+import { CategoryBudgetProvider } from "@/context/CategoryBudgetContext";
 
 SplashScreen.preventAutoHideAsync();
-
 const queryClient = new QueryClient();
 
 function RootLayoutNav() {
@@ -28,14 +24,8 @@ function RootLayoutNav() {
       <Stack.Screen name="index" options={{ headerShown: false }} />
       <Stack.Screen name="(auth)" options={{ headerShown: false }} />
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-      <Stack.Screen
-        name="add-transaction"
-        options={{ presentation: "modal", headerShown: false, animation: "slide_from_bottom" }}
-      />
-      <Stack.Screen
-        name="edit-transaction"
-        options={{ presentation: "modal", headerShown: false, animation: "slide_from_bottom" }}
-      />
+      <Stack.Screen name="add-transaction" options={{ presentation: "modal", headerShown: false, animation: "slide_from_bottom" }} />
+      <Stack.Screen name="edit-transaction" options={{ presentation: "modal", headerShown: false, animation: "slide_from_bottom" }} />
     </Stack>
   );
 }
@@ -57,13 +47,17 @@ export default function RootLayout() {
         <ErrorBoundary>
           <QueryClientProvider client={queryClient}>
             <AuthProvider>
-              <TransactionProvider>
-                <GoalsProvider>
-                  <GestureHandlerRootView style={{ flex: 1 }}>
-                    <RootLayoutNav />
-                  </GestureHandlerRootView>
-                </GoalsProvider>
-              </TransactionProvider>
+              <CurrencyProvider>
+                <TransactionProvider>
+                  <GoalsProvider>
+                    <CategoryBudgetProvider>
+                      <GestureHandlerRootView style={{ flex: 1 }}>
+                        <RootLayoutNav />
+                      </GestureHandlerRootView>
+                    </CategoryBudgetProvider>
+                  </GoalsProvider>
+                </TransactionProvider>
+              </CurrencyProvider>
             </AuthProvider>
           </QueryClientProvider>
         </ErrorBoundary>

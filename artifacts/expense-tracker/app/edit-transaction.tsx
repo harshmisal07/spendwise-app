@@ -17,6 +17,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { EXPENSE_CATEGORIES, INCOME_CATEGORIES } from "@/constants/categories";
 import { useTransactions } from "@/context/TransactionContext";
+import { useCurrency } from "@/context/CurrencyContext";
 import { useColors } from "@/hooks/useColors";
 import { CategoryIcon } from "@/components/CategoryIcon";
 
@@ -40,6 +41,7 @@ export default function EditTransactionScreen() {
   const insets = useSafeAreaInsets();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { transactions, updateTransaction } = useTransactions();
+  const { symbol } = useCurrency();
 
   const tx = transactions.find((t) => t.id === id);
 
@@ -137,7 +139,7 @@ export default function EditTransactionScreen() {
 
           {/* Amount */}
           <View style={styles.amountSection}>
-            <Text style={[styles.currencySymbol, { color: colors.mutedForeground }]}>$</Text>
+            <Text style={[styles.currencySymbol, { color: colors.mutedForeground }]}>{symbol}</Text>
             <TextInput
               style={[styles.amountInput, { color: colors.foreground }]}
               value={amount}

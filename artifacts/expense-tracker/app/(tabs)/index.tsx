@@ -2,15 +2,18 @@ import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
-import React from "react";
+import React, { useMemo } from "react";
 import { Alert, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "@/context/AuthContext";
 import { useTransactions } from "@/context/TransactionContext";
 import { useGoals } from "@/context/GoalsContext";
+import { useCurrency } from "@/context/CurrencyContext";
+import { useCategoryBudgets } from "@/context/CategoryBudgetContext";
 import { useColors } from "@/hooks/useColors";
 import { SummaryCard } from "@/components/SummaryCard";
 import { TransactionCard } from "@/components/TransactionCard";
+import { getCategoryById } from "@/constants/categories";
 
 function greet() {
   const h = new Date().getHours();
@@ -19,19 +22,17 @@ function greet() {
   return "Good evening";
 }
 
-function fmt(n: number) {
-  return `₹${n.toLocaleString("en-IN", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
-}
-
 export default function DashboardScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
+  const { format } = useCurrency();
   const {
-    transactions, totalIncome, totalExpenses, balance, savings, deleteTransaction,
-    todayExpenses, thisMonthIncome, thisMonthExpenses, budgetRemaining, budgetPercent,
+    transactions, totalIncome, totalExpenses, balance, deleteTransaction,
+    todayExpenses, thisMonthExpenses, budgetRemaining, budgetPercent,
   } = useTransactions();
   const { goals } = useGoals();
+  const { overBudgetCategories, nearLimitCategories } = useCategoryBudgets();
 
   const recent = transactions.slice(0, 6);
   const topPad = Platform.OS === "web" ? 67 : insets.top;
@@ -41,8 +42,27 @@ export default function DashboardScreen() {
 
   const budgetAlert =
     budgetPercent >= 100 ? "over" :
-    budgetPercent >= 80 ? "danger" :
-    budgetPercent >= 50 ? "warning" : null;
+    budgetPercent >= 80  ? "danger" :
+    budgetPercent >= 50  ? "warning" : null;
+
+  // Recurring transactions due today
+  const recurringDue = useMemo(() => {
+    const recurring = transactions.filter((t) => t.recurring && t.recurring !== "none");
+    const byCategory: Record<string, typeof transactions[0]> = {};
+    recurring.forEach((t) => {
+      const key = `${t.category}_${t.recurring}`;
+      if (!byCategory[key] || t.date > byCategory[key].date) byCategory[key] = t;
+    });
+    const now = new Date();
+    return Object.values(byCategory).filter((t) => {
+      const last = new Date(t.date + "T12:00:00");
+      const diff = Math.floor((now.getTime() - last.getTime()) / 86400000);
+      if (t.recurring === "daily")   return diff >= 1;
+      if (t.recurring === "weekly")  return diff >= 7;
+      if (t.recurring === "monthly") return diff >= 28;
+      return false;
+    });
+  }, [transactions]);
 
   function handleDelete(id: string) {
     Alert.alert("Delete Transaction", "Are you sure?", [
@@ -57,33 +77,64 @@ export default function DashboardScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
-      <ScrollView
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={[styles.scroll, { paddingTop: topPad + 4, paddingBottom: fabBottom + 70 }]}
-      >
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={[styles.scroll, { paddingTop: topPad + 4, paddingBottom: fabBottom + 70 }]}>
+
         {/* Header */}
         <View style={styles.header}>
           <View>
             <Text style={[styles.greeting, { color: colors.mutedForeground }]}>{greet()} 👋</Text>
             <Text style={[styles.username, { color: colors.foreground }]}>{user?.username ?? "User"}</Text>
           </View>
-          <TouchableOpacity
-            onPress={() => router.push("/(tabs)/profile")}
-            style={[styles.avatar, { backgroundColor: user?.avatarColor ?? "#6C5CE7" }]}
-          >
+          <TouchableOpacity onPress={() => router.push("/(tabs)/profile")} style={[styles.avatar, { backgroundColor: user?.avatarColor ?? "#6C5CE7" }]}>
             <Text style={styles.avatarText}>{initials}</Text>
           </TouchableOpacity>
         </View>
+
+        {/* Recurring Reminders */}
+        {recurringDue.length > 0 && (
+          <TouchableOpacity onPress={() => router.push("/add-transaction")} activeOpacity={0.8}>
+            <View style={[styles.reminderBanner, { backgroundColor: "#A29BFE18", borderColor: "#A29BFE40" }]}>
+              <View style={[styles.reminderIcon, { backgroundColor: "#A29BFE20" }]}>
+                <Ionicons name="refresh-circle" size={18} color="#A29BFE" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.reminderTitle, { color: "#A29BFE" }]}>
+                  {recurringDue.length} recurring transaction{recurringDue.length > 1 ? "s" : ""} due
+                </Text>
+                <Text style={[styles.reminderSub, { color: colors.mutedForeground }]}>
+                  {recurringDue.map((t) => getCategoryById(t.category).name).join(", ")}
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={16} color="#A29BFE" />
+            </View>
+          </TouchableOpacity>
+        )}
+
+        {/* Category Budget Alerts */}
+        {overBudgetCategories.length > 0 && (
+          <View style={[styles.catAlertBanner, { backgroundColor: "#FF6B6B15", borderColor: "#FF6B6B40" }]}>
+            <Ionicons name="warning" size={15} color="#FF6B6B" />
+            <Text style={[styles.catAlertText, { color: "#FF6B6B" }]}>
+              Category over budget: {overBudgetCategories.map((id) => getCategoryById(id).name).join(", ")}
+            </Text>
+          </View>
+        )}
+        {nearLimitCategories.length > 0 && overBudgetCategories.length === 0 && (
+          <View style={[styles.catAlertBanner, { backgroundColor: "#FDCB6E15", borderColor: "#FDCB6E40" }]}>
+            <Ionicons name="alert-circle" size={15} color="#FDCB6E" />
+            <Text style={[styles.catAlertText, { color: "#FDCB6E" }]}>
+              Near limit: {nearLimitCategories.map((id) => getCategoryById(id).name).join(", ")}
+            </Text>
+          </View>
+        )}
 
         {/* Budget Alerts */}
         {budgetAlert === "over" && (
           <LinearGradient colors={["#FF6B6B", "#E17055"]} style={styles.alertBanner} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}>
             <Ionicons name="warning" size={18} color="#fff" />
             <View style={{ flex: 1 }}>
-              <Text style={styles.alertTitle}>Budget Exceeded!</Text>
-              <Text style={styles.alertSub}>
-                Spent {fmt(thisMonthExpenses)} of {fmt(user?.budgetLimit ?? 0)} this month
-              </Text>
+              <Text style={styles.alertTitle}>Monthly Budget Exceeded!</Text>
+              <Text style={styles.alertSub}>Spent {format(thisMonthExpenses)} of {format(user?.budgetLimit ?? 0)}</Text>
             </View>
             <Text style={styles.alertPct}>{budgetPercent.toFixed(0)}%</Text>
           </LinearGradient>
@@ -93,45 +144,35 @@ export default function DashboardScreen() {
             <Ionicons name="alert-circle" size={18} color="#fff" />
             <View style={{ flex: 1 }}>
               <Text style={styles.alertTitle}>Nearing Budget Limit</Text>
-              <Text style={styles.alertSub}>
-                {fmt(budgetRemaining)} remaining from {fmt(user?.budgetLimit ?? 0)}
-              </Text>
+              <Text style={styles.alertSub}>{format(budgetRemaining)} remaining from {format(user?.budgetLimit ?? 0)}</Text>
             </View>
             <Text style={styles.alertPct}>{budgetPercent.toFixed(0)}%</Text>
           </LinearGradient>
         )}
         {budgetAlert === "warning" && (
-          <View style={[styles.alertBannerSoft, { backgroundColor: "#FDCB6E18", borderColor: "#FDCB6E40" }]}>
+          <View style={[styles.alertSoftBanner, { backgroundColor: "#FDCB6E18", borderColor: "#FDCB6E40" }]}>
             <Ionicons name="information-circle" size={16} color="#FDCB6E" />
             <Text style={[styles.alertSoftText, { color: "#FDCB6E" }]}>
-              50% of monthly budget used · {fmt(budgetRemaining)} left
+              50% of monthly budget used · {format(budgetRemaining)} left
             </Text>
           </View>
         )}
 
         {/* Smart Stats Row */}
         <View style={styles.smartRow}>
-          <View style={[styles.smartCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-            <View style={[styles.smartIcon, { backgroundColor: "#FF6B6B18" }]}>
-              <Ionicons name="today" size={14} color="#FF6B6B" />
+          {[
+            { label: "Today", value: format(todayExpenses), color: "#FF6B6B", icon: "today", bg: "#FF6B6B18" },
+            { label: "This Month", value: format(thisMonthExpenses), color: "#6C5CE7", icon: "calendar", bg: "#6C5CE718" },
+            { label: "Budget Left", value: format(budgetRemaining), color: "#00B894", icon: "shield-checkmark", bg: "#00B89418" },
+          ].map((s) => (
+            <View key={s.label} style={[styles.smartCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+              <View style={[styles.smartIcon, { backgroundColor: s.bg }]}>
+                <Ionicons name={s.icon as any} size={14} color={s.color} />
+              </View>
+              <Text style={[styles.smartLabel, { color: colors.mutedForeground }]}>{s.label}</Text>
+              <Text style={[styles.smartValue, { color: s.color }]} numberOfLines={1} adjustsFontSizeToFit>{s.value}</Text>
             </View>
-            <Text style={[styles.smartLabel, { color: colors.mutedForeground }]}>Today</Text>
-            <Text style={[styles.smartValue, { color: "#FF6B6B" }]}>{fmt(todayExpenses)}</Text>
-          </View>
-          <View style={[styles.smartCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-            <View style={[styles.smartIcon, { backgroundColor: "#6C5CE718" }]}>
-              <Ionicons name="calendar" size={14} color="#6C5CE7" />
-            </View>
-            <Text style={[styles.smartLabel, { color: colors.mutedForeground }]}>This Month</Text>
-            <Text style={[styles.smartValue, { color: "#6C5CE7" }]}>{fmt(thisMonthExpenses)}</Text>
-          </View>
-          <View style={[styles.smartCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-            <View style={[styles.smartIcon, { backgroundColor: "#00B89418" }]}>
-              <Ionicons name="shield-checkmark" size={14} color="#00B894" />
-            </View>
-            <Text style={[styles.smartLabel, { color: colors.mutedForeground }]}>Budget Left</Text>
-            <Text style={[styles.smartValue, { color: "#00B894" }]}>{fmt(budgetRemaining)}</Text>
-          </View>
+          ))}
         </View>
 
         {/* Balance Card */}
@@ -139,36 +180,36 @@ export default function DashboardScreen() {
           <SummaryCard title="Total Balance" amount={balance} variant="balance" />
         </View>
 
-        {/* Income / Expense / Savings */}
+        {/* Income / Expense / Savings row */}
         <View style={styles.row}>
           <SummaryCard title="Income" amount={totalIncome} variant="income" compact />
           <SummaryCard title="Expenses" amount={totalExpenses} variant="expense" compact />
         </View>
-        <View style={styles.row}>
-          <SummaryCard title="Savings" amount={savings} variant="savings" compact />
-          {user?.budgetLimit ? (
-            <View style={[styles.budgetCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-              <View style={[styles.budgetIconWrap, { backgroundColor: "#FDCB6E22" }]}>
+
+        {/* Budget Progress */}
+        {user?.budgetLimit ? (
+          <View style={[styles.budgetCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <View style={styles.budgetHeader}>
+              <View style={[styles.budgetIcon, { backgroundColor: "#FDCB6E22" }]}>
                 <Ionicons name="shield" size={14} color="#FDCB6E" />
               </View>
-              <Text style={[styles.budgetLabel, { color: colors.mutedForeground }]}>Budget</Text>
-              <Text style={[styles.budgetAmount, { color: colors.foreground }]}>
-                {fmt(user.budgetLimit)}
-              </Text>
-              <View style={[styles.budgetTrackBg, { backgroundColor: colors.muted }]}>
-                <View
-                  style={[
-                    styles.budgetTrackFill,
-                    { width: `${budgetPercent}%`, backgroundColor: budgetPercent >= 100 ? "#FF6B6B" : budgetPercent >= 80 ? "#E17055" : budgetPercent >= 50 ? "#FDCB6E" : "#00B894" },
-                  ]}
-                />
-              </View>
-              <Text style={[styles.budgetPct, { color: colors.mutedForeground }]}>
+              <Text style={[styles.budgetTitle, { color: colors.foreground }]}>Monthly Budget</Text>
+              <Text style={[styles.budgetPct, { color: budgetPercent >= 100 ? "#FF6B6B" : budgetPercent >= 80 ? "#E17055" : "#00B894" }]}>
                 {budgetPercent.toFixed(0)}% used
               </Text>
             </View>
-          ) : null}
-        </View>
+            <View style={styles.budgetAmounts}>
+              <Text style={[styles.budgetSpent, { color: "#FF6B6B" }]}>{format(thisMonthExpenses)} spent</Text>
+              <Text style={[styles.budgetTotal, { color: colors.mutedForeground }]}>{format(user.budgetLimit)} limit</Text>
+            </View>
+            <View style={[styles.budgetBarBg, { backgroundColor: colors.muted }]}>
+              <View style={[styles.budgetBarFill, {
+                width: `${budgetPercent}%`,
+                backgroundColor: budgetPercent >= 100 ? "#FF6B6B" : budgetPercent >= 80 ? "#E17055" : budgetPercent >= 50 ? "#FDCB6E" : "#00B894",
+              }]} />
+            </View>
+          </View>
+        ) : null}
 
         {/* Savings Goals Preview */}
         {previewGoals.length > 0 && (
@@ -183,21 +224,14 @@ export default function DashboardScreen() {
               {previewGoals.map((goal) => {
                 const pct = goal.targetAmount > 0 ? Math.min((goal.savedAmount / goal.targetAmount) * 100, 100) : 0;
                 return (
-                  <TouchableOpacity
-                    key={goal.id}
-                    onPress={() => router.push("/(tabs)/goals")}
-                    style={[styles.goalCard, { backgroundColor: colors.card, borderColor: colors.border }]}
-                    activeOpacity={0.8}
-                  >
+                  <TouchableOpacity key={goal.id} onPress={() => router.push("/(tabs)/goals")} style={[styles.goalCard, { backgroundColor: colors.card, borderColor: colors.border }]} activeOpacity={0.8}>
                     <View style={[styles.goalIcon, { backgroundColor: goal.color + "20" }]}>
                       <Ionicons name={goal.icon as any} size={18} color={goal.color} />
                     </View>
                     <View style={{ flex: 1 }}>
                       <View style={styles.goalTop}>
                         <Text style={[styles.goalName, { color: colors.foreground }]} numberOfLines={1}>{goal.name}</Text>
-                        <Text style={[styles.goalAmt, { color: goal.color }]}>
-                          {fmt(goal.savedAmount)} / {fmt(goal.targetAmount)}
-                        </Text>
+                        <Text style={[styles.goalAmt, { color: goal.color }]}>{format(goal.savedAmount)} / {format(goal.targetAmount)}</Text>
                       </View>
                       <View style={[styles.goalBarBg, { backgroundColor: colors.muted }]}>
                         <View style={[styles.goalBarFill, { width: `${pct}%`, backgroundColor: goal.color }]} />
@@ -230,20 +264,12 @@ export default function DashboardScreen() {
             <Text style={[styles.emptyText, { color: colors.mutedForeground }]}>Tap + to add your first transaction</Text>
           </View>
         ) : (
-          <View>
-            {recent.map((t) => (
-              <TransactionCard key={t.id} transaction={t} onDelete={handleDelete} onEdit={handleEdit} />
-            ))}
-          </View>
+          <View>{recent.map((t) => <TransactionCard key={t.id} transaction={t} onDelete={handleDelete} onEdit={handleEdit} />)}</View>
         )}
       </ScrollView>
 
       {/* FAB */}
-      <TouchableOpacity
-        onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); router.push("/add-transaction"); }}
-        activeOpacity={0.85}
-        style={[styles.fab, { bottom: fabBottom }]}
-      >
+      <TouchableOpacity onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); router.push("/add-transaction"); }} activeOpacity={0.85} style={[styles.fab, { bottom: fabBottom }]}>
         <LinearGradient colors={["#4834D4", "#6C5CE7"]} style={styles.fabGrad} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
           <Ionicons name="add" size={30} color="#fff" />
         </LinearGradient>
@@ -254,41 +280,40 @@ export default function DashboardScreen() {
 
 const styles = StyleSheet.create({
   scroll: { paddingHorizontal: 16 },
-  header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 14, paddingTop: 4 },
+  header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 12, paddingTop: 4 },
   greeting: { fontSize: 13, fontFamily: "Inter_400Regular", marginBottom: 2 },
   username: { fontSize: 24, fontFamily: "Inter_700Bold" },
-  avatar: {
-    width: 48, height: 48, borderRadius: 24,
-    alignItems: "center", justifyContent: "center",
-    shadowColor: "#6C5CE7", shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.3, shadowRadius: 6, elevation: 4,
-  },
+  avatar: { width: 48, height: 48, borderRadius: 24, alignItems: "center", justifyContent: "center", shadowColor: "#6C5CE7", shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.3, shadowRadius: 6, elevation: 4 },
   avatarText: { color: "#fff", fontSize: 17, fontFamily: "Inter_700Bold" },
-  alertBanner: {
-    flexDirection: "row", alignItems: "center", gap: 10,
-    padding: 14, borderRadius: 14, marginBottom: 12,
-  },
+  reminderBanner: { flexDirection: "row", alignItems: "center", gap: 10, padding: 12, borderRadius: 12, marginBottom: 10, borderWidth: 1 },
+  reminderIcon: { width: 32, height: 32, borderRadius: 10, alignItems: "center", justifyContent: "center" },
+  reminderTitle: { fontSize: 13, fontFamily: "Inter_600SemiBold" },
+  reminderSub: { fontSize: 11, fontFamily: "Inter_400Regular", marginTop: 1 },
+  catAlertBanner: { flexDirection: "row", alignItems: "center", gap: 8, padding: 10, borderRadius: 10, marginBottom: 8, borderWidth: 1 },
+  catAlertText: { fontSize: 12, fontFamily: "Inter_500Medium", flex: 1 },
+  alertBanner: { flexDirection: "row", alignItems: "center", gap: 10, padding: 14, borderRadius: 14, marginBottom: 10 },
   alertTitle: { color: "#fff", fontSize: 13, fontFamily: "Inter_700Bold" },
   alertSub: { color: "rgba(255,255,255,0.85)", fontSize: 11, fontFamily: "Inter_400Regular", marginTop: 1 },
   alertPct: { color: "#fff", fontSize: 18, fontFamily: "Inter_700Bold" },
-  alertBannerSoft: {
-    flexDirection: "row", alignItems: "center", gap: 8,
-    padding: 10, borderRadius: 12, marginBottom: 12, borderWidth: 1,
-  },
+  alertSoftBanner: { flexDirection: "row", alignItems: "center", gap: 8, padding: 10, borderRadius: 12, marginBottom: 10, borderWidth: 1 },
   alertSoftText: { fontSize: 12, fontFamily: "Inter_500Medium", flex: 1 },
   smartRow: { flexDirection: "row", gap: 10, marginBottom: 12 },
   smartCard: { flex: 1, borderRadius: 16, padding: 12, borderWidth: 1, gap: 4 },
   smartIcon: { width: 26, height: 26, borderRadius: 8, alignItems: "center", justifyContent: "center", marginBottom: 2 },
   smartLabel: { fontSize: 10, fontFamily: "Inter_400Regular" },
-  smartValue: { fontSize: 14, fontFamily: "Inter_700Bold" },
+  smartValue: { fontSize: 13, fontFamily: "Inter_700Bold" },
   balanceCard: { marginBottom: 12 },
   row: { flexDirection: "row", gap: 12, marginBottom: 12 },
-  budgetCard: { flex: 1, borderRadius: 18, padding: 16, borderWidth: 1, gap: 4 },
-  budgetIconWrap: { width: 28, height: 28, borderRadius: 14, alignItems: "center", justifyContent: "center", marginBottom: 2 },
-  budgetLabel: { fontSize: 12, fontFamily: "Inter_400Regular" },
-  budgetAmount: { fontSize: 18, fontFamily: "Inter_700Bold" },
-  budgetTrackBg: { height: 5, borderRadius: 3, overflow: "hidden", marginVertical: 4 },
-  budgetTrackFill: { height: "100%", borderRadius: 3 },
-  budgetPct: { fontSize: 11, fontFamily: "Inter_400Regular" },
+  budgetCard: { borderRadius: 18, padding: 16, borderWidth: 1, marginBottom: 16, gap: 8 },
+  budgetHeader: { flexDirection: "row", alignItems: "center", gap: 8 },
+  budgetIcon: { width: 26, height: 26, borderRadius: 8, alignItems: "center", justifyContent: "center" },
+  budgetTitle: { flex: 1, fontSize: 14, fontFamily: "Inter_600SemiBold" },
+  budgetPct: { fontSize: 13, fontFamily: "Inter_700Bold" },
+  budgetAmounts: { flexDirection: "row", justifyContent: "space-between" },
+  budgetSpent: { fontSize: 13, fontFamily: "Inter_600SemiBold" },
+  budgetTotal: { fontSize: 13, fontFamily: "Inter_400Regular" },
+  budgetBarBg: { height: 6, borderRadius: 3, overflow: "hidden" },
+  budgetBarFill: { height: "100%", borderRadius: 3 },
   sectionHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 10, marginTop: 4 },
   sectionTitle: { fontSize: 18, fontFamily: "Inter_700Bold" },
   seeAll: { fontSize: 13, fontFamily: "Inter_500Medium" },

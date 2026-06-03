@@ -8,15 +8,12 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useGoals, GOAL_COLORS, GOAL_ICONS } from "@/context/GoalsContext";
+import { useCurrency } from "@/context/CurrencyContext";
 import { useColors } from "@/hooks/useColors";
-
-function fmt(n: number) {
-  return `₹${n.toLocaleString("en-IN", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
-}
 
 function daysLeft(targetDate: string): string {
   const diff = Math.ceil((new Date(targetDate).getTime() - Date.now()) / 86400000);
-  if (diff < 0) return "Overdue";
+  if (diff < 0)  return "Overdue";
   if (diff === 0) return "Due today";
   return `${diff}d left`;
 }
@@ -25,23 +22,25 @@ export default function GoalsScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const { goals, addGoal, addToSaved, deleteGoal, totalSaved, totalTarget } = useGoals();
-  const topPad = Platform.OS === "web" ? 67 : insets.top;
+  const { format, symbol } = useCurrency();
+  const topPad    = Platform.OS === "web" ? 67 : insets.top;
   const bottomPad = Platform.OS === "web" ? 34 + 84 : 110;
 
-  const [showAdd, setShowAdd] = useState(false);
+  const [showAdd,    setShowAdd]    = useState(false);
   const [fundGoalId, setFundGoalId] = useState<string | null>(null);
   const [fundAmount, setFundAmount] = useState("");
-
-  const [name, setName] = useState("");
-  const [target, setTarget] = useState("");
-  const [targetDate, setTargetDate] = useState(() => {
-    const d = new Date();
-    d.setMonth(d.getMonth() + 6);
+  const [name,          setName]          = useState("");
+  const [target,        setTarget]        = useState("");
+  const [targetDate,    setTargetDate]    = useState(() => {
+    const d = new Date(); d.setMonth(d.getMonth() + 6);
     return d.toISOString().split("T")[0];
   });
   const [selectedColor, setSelectedColor] = useState(GOAL_COLORS[0]);
-  const [selectedIcon, setSelectedIcon] = useState(GOAL_ICONS[0]);
-  const [saving, setSaving] = useState(false);
+  const [selectedIcon,  setSelectedIcon]  = useState(GOAL_ICONS[0]);
+  const [saving,        setSaving]        = useState(false);
+
+  const completedGoals = goals.filter((g) => g.savedAmount >= g.targetAmount).length;
+  const overallPct     = totalTarget > 0 ? Math.min((totalSaved / totalTarget) * 100, 100) : 0;
 
   async function handleAdd() {
     if (!name.trim()) { Alert.alert("Required", "Please enter a goal name"); return; }
@@ -62,8 +61,7 @@ export default function GoalsScreen() {
     if (!fundAmount || isNaN(amt) || amt <= 0) { Alert.alert("Invalid", "Enter a valid amount"); return; }
     await addToSaved(fundGoalId, amt);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    setFundGoalId(null);
-    setFundAmount("");
+    setFundGoalId(null); setFundAmount("");
   }
 
   function handleDelete(id: string, name: string) {
@@ -75,44 +73,55 @@ export default function GoalsScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
-      <ScrollView
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={[styles.scroll, { paddingTop: topPad + 8, paddingBottom: bottomPad }]}
-      >
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={[styles.scroll, { paddingTop: topPad + 8, paddingBottom: bottomPad }]}>
+
         {/* Header */}
         <View style={styles.headerRow}>
           <View>
             <Text style={[styles.pageTitle, { color: colors.foreground }]}>Savings Goals</Text>
             <Text style={[styles.pageSub, { color: colors.mutedForeground }]}>Track your financial dreams</Text>
           </View>
-          <TouchableOpacity
-            onPress={() => { setShowAdd(true); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }}
-            style={styles.addBtn}
-          >
+          <TouchableOpacity onPress={() => { setShowAdd(true); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }} style={styles.addBtnWrap}>
             <LinearGradient colors={["#4834D4", "#6C5CE7"]} style={styles.addBtnGrad} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
               <Ionicons name="add" size={22} color="#fff" />
             </LinearGradient>
           </TouchableOpacity>
         </View>
 
-        {/* Summary */}
+        {/* Analytics Summary Card */}
         {goals.length > 0 && (
-          <LinearGradient colors={["#4834D4", "#6C5CE7", "#A29BFE"]} style={styles.summaryCard} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
-            <View style={styles.summaryItem}>
-              <Text style={styles.summaryLabel}>Total Saved</Text>
-              <Text style={styles.summaryValue}>{fmt(totalSaved)}</Text>
+          <>
+            <LinearGradient colors={["#4834D4", "#6C5CE7", "#A29BFE"]} style={styles.summaryCard} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
+              <View style={styles.summaryItem}>
+                <Text style={styles.summaryLabel}>Total Saved</Text>
+                <Text style={styles.summaryValue}>{format(totalSaved)}</Text>
+              </View>
+              <View style={styles.summaryDivider} />
+              <View style={styles.summaryItem}>
+                <Text style={styles.summaryLabel}>Target</Text>
+                <Text style={styles.summaryValue}>{format(totalTarget)}</Text>
+              </View>
+              <View style={styles.summaryDivider} />
+              <View style={styles.summaryItem}>
+                <Text style={styles.summaryLabel}>Done</Text>
+                <Text style={styles.summaryValue}>{completedGoals}/{goals.length}</Text>
+              </View>
+            </LinearGradient>
+
+            {/* Overall progress */}
+            <View style={[styles.overallCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+              <View style={styles.overallRow}>
+                <Text style={[styles.overallLabel, { color: colors.foreground }]}>Overall Progress</Text>
+                <Text style={[styles.overallPct, { color: "#6C5CE7" }]}>{overallPct.toFixed(0)}%</Text>
+              </View>
+              <View style={[styles.overallBarBg, { backgroundColor: colors.muted }]}>
+                <LinearGradient colors={["#4834D4", "#6C5CE7", "#A29BFE"]} style={[styles.overallBarFill, { width: `${overallPct}%` }]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} />
+              </View>
+              <Text style={[styles.overallSub, { color: colors.mutedForeground }]}>
+                {format(totalSaved)} saved of {format(totalTarget)} across {goals.length} goal{goals.length !== 1 ? "s" : ""}
+              </Text>
             </View>
-            <View style={styles.summaryDivider} />
-            <View style={styles.summaryItem}>
-              <Text style={styles.summaryLabel}>Total Target</Text>
-              <Text style={styles.summaryValue}>{fmt(totalTarget)}</Text>
-            </View>
-            <View style={styles.summaryDivider} />
-            <View style={styles.summaryItem}>
-              <Text style={styles.summaryLabel}>Goals</Text>
-              <Text style={styles.summaryValue}>{goals.length}</Text>
-            </View>
-          </LinearGradient>
+          </>
         )}
 
         {/* Goals List */}
@@ -123,10 +132,7 @@ export default function GoalsScreen() {
             </LinearGradient>
             <Text style={[styles.emptyTitle, { color: colors.foreground }]}>No goals yet</Text>
             <Text style={[styles.emptyText, { color: colors.mutedForeground }]}>Tap + to create your first savings goal</Text>
-            <TouchableOpacity
-              onPress={() => setShowAdd(true)}
-              style={styles.emptyAddBtn}
-            >
+            <TouchableOpacity onPress={() => setShowAdd(true)} style={styles.emptyAddBtn}>
               <LinearGradient colors={["#4834D4", "#6C5CE7"]} style={styles.emptyAddGrad} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}>
                 <Ionicons name="add" size={18} color="#fff" />
                 <Text style={styles.emptyAddText}>Create Goal</Text>
@@ -136,7 +142,7 @@ export default function GoalsScreen() {
         ) : (
           <View style={{ gap: 14 }}>
             {goals.map((goal) => {
-              const pct = goal.targetAmount > 0 ? Math.min((goal.savedAmount / goal.targetAmount) * 100, 100) : 0;
+              const pct  = goal.targetAmount > 0 ? Math.min((goal.savedAmount / goal.targetAmount) * 100, 100) : 0;
               const done = pct >= 100;
               return (
                 <View key={goal.id} style={[styles.goalCard, { backgroundColor: colors.card, borderColor: done ? goal.color : colors.border }]}>
@@ -146,7 +152,7 @@ export default function GoalsScreen() {
                       <Text style={styles.goalDoneText}>GOAL REACHED!</Text>
                     </LinearGradient>
                   )}
-                  <View style={styles.goalHeader}>
+                  <View style={[styles.goalHeader, done && { marginTop: 10 }]}>
                     <View style={[styles.goalIcon, { backgroundColor: goal.color + "20" }]}>
                       <Ionicons name={goal.icon as any} size={22} color={goal.color} />
                     </View>
@@ -158,10 +164,7 @@ export default function GoalsScreen() {
                         <Text style={{ color: goal.color }}>{daysLeft(goal.targetDate)}</Text>
                       </Text>
                     </View>
-                    <TouchableOpacity
-                      onPress={() => handleDelete(goal.id, goal.name)}
-                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                    >
+                    <TouchableOpacity onPress={() => handleDelete(goal.id, goal.name)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
                       <Ionicons name="trash-outline" size={18} color={colors.mutedForeground} />
                     </TouchableOpacity>
                   </View>
@@ -169,7 +172,7 @@ export default function GoalsScreen() {
                   <View style={styles.goalAmounts}>
                     <View>
                       <Text style={[styles.goalAmtLabel, { color: colors.mutedForeground }]}>Saved</Text>
-                      <Text style={[styles.goalAmtValue, { color: goal.color }]}>{fmt(goal.savedAmount)}</Text>
+                      <Text style={[styles.goalAmtValue, { color: goal.color }]}>{format(goal.savedAmount)}</Text>
                     </View>
                     <View style={{ alignItems: "center" }}>
                       <Text style={[styles.goalAmtLabel, { color: colors.mutedForeground }]}>Progress</Text>
@@ -177,19 +180,21 @@ export default function GoalsScreen() {
                     </View>
                     <View style={{ alignItems: "flex-end" }}>
                       <Text style={[styles.goalAmtLabel, { color: colors.mutedForeground }]}>Target</Text>
-                      <Text style={[styles.goalAmtValue, { color: colors.foreground }]}>{fmt(goal.targetAmount)}</Text>
+                      <Text style={[styles.goalAmtValue, { color: colors.foreground }]}>{format(goal.targetAmount)}</Text>
                     </View>
                   </View>
 
                   <View style={[styles.goalBarBg, { backgroundColor: colors.muted }]}>
-                    <View style={[styles.goalBarFill, { width: `${pct}%`, backgroundColor: goal.color }]} />
+                    <LinearGradient
+                      colors={[goal.color, goal.color + "AA"]}
+                      style={[styles.goalBarFill, { width: `${pct}%` }]}
+                      start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+                    />
                   </View>
 
                   {!done && (
-                    <TouchableOpacity
-                      onPress={() => { setFundGoalId(goal.id); setFundAmount(""); }}
-                      style={[styles.addFundsBtn, { borderColor: goal.color + "60", backgroundColor: goal.color + "12" }]}
-                    >
+                    <TouchableOpacity onPress={() => { setFundGoalId(goal.id); setFundAmount(""); }}
+                      style={[styles.addFundsBtn, { borderColor: goal.color + "60", backgroundColor: goal.color + "12" }]}>
                       <Ionicons name="add-circle-outline" size={16} color={goal.color} />
                       <Text style={[styles.addFundsText, { color: goal.color }]}>Add Funds</Text>
                     </TouchableOpacity>
@@ -208,26 +213,13 @@ export default function GoalsScreen() {
             <View style={[styles.modalSheet, { backgroundColor: colors.card }]}>
               <View style={styles.modalHandle} />
               <Text style={[styles.modalTitle, { color: colors.foreground }]}>Add Funds</Text>
-              <Text style={[styles.modalSub, { color: colors.mutedForeground }]}>
-                {goals.find((g) => g.id === fundGoalId)?.name}
-              </Text>
+              <Text style={[styles.modalSub, { color: colors.mutedForeground }]}>{goals.find((g) => g.id === fundGoalId)?.name}</Text>
               <View style={[styles.modalInput, { backgroundColor: colors.background, borderColor: colors.border }]}>
-                <Text style={[styles.modalCurrency, { color: colors.mutedForeground }]}>₹</Text>
-                <TextInput
-                  style={[styles.modalInputText, { color: colors.foreground }]}
-                  value={fundAmount}
-                  onChangeText={setFundAmount}
-                  keyboardType="decimal-pad"
-                  placeholder="0"
-                  placeholderTextColor={colors.mutedForeground}
-                  autoFocus
-                />
+                <Text style={[styles.modalCurrency, { color: colors.mutedForeground }]}>{symbol}</Text>
+                <TextInput style={[styles.modalInputText, { color: colors.foreground }]} value={fundAmount} onChangeText={setFundAmount} keyboardType="decimal-pad" placeholder="0" placeholderTextColor={colors.mutedForeground} autoFocus />
               </View>
               <View style={styles.modalBtns}>
-                <TouchableOpacity
-                  onPress={() => { setFundGoalId(null); setFundAmount(""); }}
-                  style={[styles.modalCancelBtn, { backgroundColor: colors.muted }]}
-                >
+                <TouchableOpacity onPress={() => { setFundGoalId(null); setFundAmount(""); }} style={[styles.modalCancelBtn, { backgroundColor: colors.muted }]}>
                   <Text style={[styles.modalCancelText, { color: colors.mutedForeground }]}>Cancel</Text>
                 </TouchableOpacity>
                 <TouchableOpacity onPress={handleAddFunds} activeOpacity={0.85} style={{ flex: 1 }}>
@@ -252,77 +244,41 @@ export default function GoalsScreen() {
 
                 <Text style={[styles.formLabel, { color: colors.mutedForeground }]}>GOAL NAME</Text>
                 <View style={[styles.formInput, { backgroundColor: colors.background, borderColor: colors.border }]}>
-                  <TextInput
-                    style={[styles.formInputText, { color: colors.foreground }]}
-                    value={name}
-                    onChangeText={setName}
-                    placeholder="e.g. New iPhone, Vacation, Emergency Fund"
-                    placeholderTextColor={colors.mutedForeground}
-                  />
+                  <TextInput style={[styles.formInputText, { color: colors.foreground }]} value={name} onChangeText={setName} placeholder="e.g. New Phone, Vacation, Emergency Fund" placeholderTextColor={colors.mutedForeground} />
                 </View>
 
-                <Text style={[styles.formLabel, { color: colors.mutedForeground }]}>TARGET AMOUNT (₹)</Text>
+                <Text style={[styles.formLabel, { color: colors.mutedForeground }]}>TARGET AMOUNT ({symbol})</Text>
                 <View style={[styles.formInput, { backgroundColor: colors.background, borderColor: colors.border }]}>
-                  <Text style={[styles.modalCurrency, { color: colors.mutedForeground }]}>₹</Text>
-                  <TextInput
-                    style={[styles.formInputText, { color: colors.foreground }]}
-                    value={target}
-                    onChangeText={setTarget}
-                    keyboardType="decimal-pad"
-                    placeholder="0"
-                    placeholderTextColor={colors.mutedForeground}
-                  />
+                  <Text style={[styles.modalCurrency, { color: colors.mutedForeground }]}>{symbol}</Text>
+                  <TextInput style={[styles.formInputText, { color: colors.foreground }]} value={target} onChangeText={setTarget} keyboardType="decimal-pad" placeholder="0" placeholderTextColor={colors.mutedForeground} />
                 </View>
 
                 <Text style={[styles.formLabel, { color: colors.mutedForeground }]}>TARGET DATE</Text>
                 <View style={[styles.formInput, { backgroundColor: colors.background, borderColor: colors.border }]}>
                   <Ionicons name="calendar-outline" size={18} color={colors.mutedForeground} />
-                  <TextInput
-                    style={[styles.formInputText, { color: colors.foreground }]}
-                    value={targetDate}
-                    onChangeText={setTargetDate}
-                    placeholder="YYYY-MM-DD"
-                    placeholderTextColor={colors.mutedForeground}
-                    keyboardType="numbers-and-punctuation"
-                  />
+                  <TextInput style={[styles.formInputText, { color: colors.foreground }]} value={targetDate} onChangeText={setTargetDate} placeholder="YYYY-MM-DD" placeholderTextColor={colors.mutedForeground} keyboardType="numbers-and-punctuation" />
                 </View>
 
                 <Text style={[styles.formLabel, { color: colors.mutedForeground }]}>COLOUR</Text>
                 <View style={styles.colorRow}>
                   {GOAL_COLORS.map((c) => (
-                    <TouchableOpacity
-                      key={c}
-                      onPress={() => { setSelectedColor(c); Haptics.selectionAsync(); }}
-                      style={[styles.colorDot, { backgroundColor: c, borderWidth: selectedColor === c ? 3 : 0, borderColor: "#fff" }]}
-                    />
+                    <TouchableOpacity key={c} onPress={() => { setSelectedColor(c); Haptics.selectionAsync(); }}
+                      style={[styles.colorDot, { backgroundColor: c, borderWidth: selectedColor === c ? 3 : 0, borderColor: "#fff" }]} />
                   ))}
                 </View>
 
                 <Text style={[styles.formLabel, { color: colors.mutedForeground }]}>ICON</Text>
                 <View style={styles.iconRow}>
                   {GOAL_ICONS.map((icon) => (
-                    <TouchableOpacity
-                      key={icon}
-                      onPress={() => { setSelectedIcon(icon); Haptics.selectionAsync(); }}
-                      style={[
-                        styles.iconBtn,
-                        {
-                          backgroundColor: selectedIcon === icon ? selectedColor + "25" : colors.background,
-                          borderColor: selectedIcon === icon ? selectedColor : colors.border,
-                          borderWidth: selectedIcon === icon ? 2 : 1,
-                        },
-                      ]}
-                    >
+                    <TouchableOpacity key={icon} onPress={() => { setSelectedIcon(icon); Haptics.selectionAsync(); }}
+                      style={[styles.iconBtn, { backgroundColor: selectedIcon === icon ? selectedColor + "25" : colors.background, borderColor: selectedIcon === icon ? selectedColor : colors.border, borderWidth: selectedIcon === icon ? 2 : 1 }]}>
                       <Ionicons name={icon as any} size={22} color={selectedIcon === icon ? selectedColor : colors.mutedForeground} />
                     </TouchableOpacity>
                   ))}
                 </View>
 
                 <View style={styles.modalBtns}>
-                  <TouchableOpacity
-                    onPress={() => setShowAdd(false)}
-                    style={[styles.modalCancelBtn, { backgroundColor: colors.muted }]}
-                  >
+                  <TouchableOpacity onPress={() => setShowAdd(false)} style={[styles.modalCancelBtn, { backgroundColor: colors.muted }]}>
                     <Text style={[styles.modalCancelText, { color: colors.mutedForeground }]}>Cancel</Text>
                   </TouchableOpacity>
                   <TouchableOpacity onPress={handleAdd} disabled={saving} activeOpacity={0.85} style={{ flex: 1 }}>
@@ -345,25 +301,24 @@ const styles = StyleSheet.create({
   headerRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 16 },
   pageTitle: { fontSize: 26, fontFamily: "Inter_700Bold", marginBottom: 2 },
   pageSub: { fontSize: 13, fontFamily: "Inter_400Regular" },
-  addBtn: { shadowColor: "#6C5CE7", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 6 },
+  addBtnWrap: { shadowColor: "#6C5CE7", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 6 },
   addBtnGrad: { width: 44, height: 44, borderRadius: 14, alignItems: "center", justifyContent: "center" },
-  summaryCard: {
-    borderRadius: 20, padding: 20, flexDirection: "row",
-    alignItems: "center", marginBottom: 20,
-    shadowColor: "#6C5CE7", shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.25, shadowRadius: 12, elevation: 6,
-  },
+  summaryCard: { borderRadius: 20, padding: 20, flexDirection: "row", alignItems: "center", marginBottom: 12, shadowColor: "#6C5CE7", shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.25, shadowRadius: 12, elevation: 6 },
   summaryItem: { flex: 1, alignItems: "center" },
   summaryLabel: { color: "rgba(255,255,255,0.7)", fontSize: 11, fontFamily: "Inter_400Regular", marginBottom: 4 },
-  summaryValue: { color: "#fff", fontSize: 18, fontFamily: "Inter_700Bold" },
+  summaryValue: { color: "#fff", fontSize: 16, fontFamily: "Inter_700Bold" },
   summaryDivider: { width: 1, height: 36, backgroundColor: "rgba(255,255,255,0.25)" },
+  overallCard: { borderRadius: 16, padding: 16, borderWidth: 1, marginBottom: 16 },
+  overallRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 10 },
+  overallLabel: { fontSize: 14, fontFamily: "Inter_600SemiBold" },
+  overallPct: { fontSize: 16, fontFamily: "Inter_700Bold" },
+  overallBarBg: { height: 8, borderRadius: 4, overflow: "hidden", marginBottom: 8 },
+  overallBarFill: { height: "100%", borderRadius: 4 },
+  overallSub: { fontSize: 12, fontFamily: "Inter_400Regular" },
   goalCard: { borderRadius: 20, padding: 18, borderWidth: 1, overflow: "hidden" },
-  goalDoneBadge: {
-    position: "absolute", top: 0, left: 0, right: 0,
-    flexDirection: "row", alignItems: "center", justifyContent: "center",
-    gap: 5, paddingVertical: 4,
-  },
+  goalDoneBadge: { position: "absolute", top: 0, left: 0, right: 0, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 5, paddingVertical: 5 },
   goalDoneText: { color: "#fff", fontSize: 9, fontFamily: "Inter_700Bold", letterSpacing: 1 },
-  goalHeader: { flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 14, marginTop: 8 },
+  goalHeader: { flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 14 },
   goalIcon: { width: 46, height: 46, borderRadius: 14, alignItems: "center", justifyContent: "center" },
   goalName: { fontSize: 16, fontFamily: "Inter_700Bold", marginBottom: 3 },
   goalDate: { fontSize: 12, fontFamily: "Inter_400Regular" },
@@ -373,10 +328,7 @@ const styles = StyleSheet.create({
   goalPct: { fontSize: 15, fontFamily: "Inter_700Bold" },
   goalBarBg: { height: 8, borderRadius: 4, overflow: "hidden", marginBottom: 12 },
   goalBarFill: { height: "100%", borderRadius: 4 },
-  addFundsBtn: {
-    flexDirection: "row", alignItems: "center", justifyContent: "center",
-    gap: 6, borderRadius: 12, borderWidth: 1, paddingVertical: 10,
-  },
+  addFundsBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, borderRadius: 12, borderWidth: 1, paddingVertical: 10 },
   addFundsText: { fontSize: 14, fontFamily: "Inter_600SemiBold" },
   empty: { alignItems: "center", padding: 40, borderRadius: 20, borderWidth: 1, borderStyle: "dashed", gap: 12, marginTop: 20 },
   emptyIconWrap: { width: 80, height: 80, borderRadius: 24, alignItems: "center", justifyContent: "center" },
@@ -391,10 +343,7 @@ const styles = StyleSheet.create({
   modalHandle: { width: 40, height: 4, borderRadius: 2, backgroundColor: "#B2BEC3", alignSelf: "center", marginBottom: 20 },
   modalTitle: { fontSize: 20, fontFamily: "Inter_700Bold", marginBottom: 4 },
   modalSub: { fontSize: 14, fontFamily: "Inter_400Regular", marginBottom: 20 },
-  modalInput: {
-    flexDirection: "row", alignItems: "center", borderRadius: 14,
-    borderWidth: 1, paddingHorizontal: 16, height: 60, marginBottom: 20, gap: 8,
-  },
+  modalInput: { flexDirection: "row", alignItems: "center", borderRadius: 14, borderWidth: 1, paddingHorizontal: 16, height: 60, marginBottom: 20, gap: 8 },
   modalCurrency: { fontSize: 22, fontFamily: "Inter_400Regular" },
   modalInputText: { flex: 1, fontSize: 28, fontFamily: "Inter_700Bold" },
   modalBtns: { flexDirection: "row", gap: 12, marginTop: 8 },
@@ -403,10 +352,7 @@ const styles = StyleSheet.create({
   modalConfirmBtn: { borderRadius: 14, height: 52, alignItems: "center", justifyContent: "center" },
   modalConfirmText: { color: "#fff", fontSize: 15, fontFamily: "Inter_700Bold" },
   formLabel: { fontSize: 10, fontFamily: "Inter_600SemiBold", letterSpacing: 1, marginBottom: 8, marginTop: 14 },
-  formInput: {
-    flexDirection: "row", alignItems: "center", borderRadius: 12,
-    borderWidth: 1, paddingHorizontal: 14, height: 50, marginBottom: 4, gap: 8,
-  },
+  formInput: { flexDirection: "row", alignItems: "center", borderRadius: 12, borderWidth: 1, paddingHorizontal: 14, height: 50, marginBottom: 4, gap: 8 },
   formInputText: { flex: 1, fontSize: 15, fontFamily: "Inter_400Regular" },
   colorRow: { flexDirection: "row", gap: 10, marginBottom: 4 },
   colorDot: { width: 32, height: 32, borderRadius: 16 },
