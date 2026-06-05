@@ -18,13 +18,21 @@ import { CategoryBudgetProvider } from "@/context/CategoryBudgetContext";
 import { BackupProvider } from "@/context/BackupContext";
 import { AchievementsProvider } from "@/context/AchievementsContext";
 import { ChallengesProvider } from "@/context/ChallengesContext";
+import { PremiumProvider } from "@/context/PremiumContext";
+import { NotificationsProvider } from "@/context/NotificationsContext";
 
 SplashScreen.preventAutoHideAsync();
 const queryClient = new QueryClient();
 
 function AuthenticatedProviders({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
-  return <BackupProvider userId={user?.id ?? null}>{children}</BackupProvider>;
+  return (
+    <PremiumProvider>
+      <NotificationsProvider>
+        <BackupProvider userId={user?.id ?? null}>{children}</BackupProvider>
+      </NotificationsProvider>
+    </PremiumProvider>
+  );
 }
 
 function RootLayoutNav() {

@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import React, { useMemo, useState } from "react";
-import { Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import React, { useCallback, useMemo, useState } from "react";
+import { ActivityIndicator, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTransactions } from "@/context/TransactionContext";
 import { useGoals } from "@/context/GoalsContext";
@@ -287,6 +287,53 @@ export default function AICoachScreen() {
 
   const scoreArc = Math.min(score, 100);
 
+  const [aiInsights, setAiInsights] = useState<string[]>([]);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiSource, setAiSource] = useState<"gemini" | "rule-based" | null>(null);
+  const [aiError, setAiError] = useState<string | null>(null);
+
+  const topCategories = useMemo(() => {
+    const map: Record<string, number> = {};
+    transactions.filter((t) => t.type === "expense").forEach((t) => {
+      map[t.category] = (map[t.category] ?? 0) + t.amount;
+    });
+    return Object.entries(map)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
+      .map(([id, amount]) => ({ name: getCategoryById(id).name, amount }));
+  }, [transactions]);
+
+  const fetchAIInsights = useCallback(async () => {
+    setAiLoading(true);
+    setAiError(null);
+    try {
+      const apiBase = `https://${process.env.EXPO_PUBLIC_DOMAIN}/api`;
+      const res = await fetch(`${apiBase}/ai-insights`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          monthlyIncome: thisMonthIncome,
+          monthlyExpenses: thisMonthExpenses,
+          savingsRate,
+          budgetPercent,
+          budgetLimit,
+          balance,
+          topCategories,
+          goals: goals.map((g) => ({ name: g.name, savedAmount: g.savedAmount, targetAmount: g.targetAmount })),
+          transactionCount: transactions.length,
+        }),
+      });
+      if (!res.ok) throw new Error("Server error");
+      const data = await res.json();
+      setAiInsights(data.insights ?? []);
+      setAiSource(data.source ?? "rule-based");
+    } catch (err: any) {
+      setAiError("Could not load AI analysis. Check your connection.");
+    } finally {
+      setAiLoading(false);
+    }
+  }, [thisMonthIncome, thisMonthExpenses, savingsRate, budgetPercent, budgetLimit, balance, topCategories, goals, transactions.length]);
+
   const metrics = [
     {
       label: "Savings Rate",
@@ -395,6 +442,70 @@ export default function AICoachScreen() {
         ))}
       </View>
 
+      {/* Gemini AI Analysis */}
+      <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border, marginBottom: 16 }]}>
+        <View style={styles.geminiHeader}>
+          <View style={[styles.geminiIcon, { backgroundColor: "#6C5CE720" }]}>
+            <Ionicons name="sparkles" size={18} color="#6C5CE7" />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.cardTitle, { color: colors.foreground, marginBottom: 2 }]}>AI-Powered Analysis</Text>
+            <Text style={[styles.geminiSub, { color: colors.mutedForeground }]}>
+              {aiSource === "gemini" ? "Powered by Gemini AI" : "Smart rule-based insights"}
+            </Text>
+          </View>
+          {aiSource && (
+            <View style={[styles.sourcePill, { backgroundColor: aiSource === "gemini" ? "#6C5CE720" : "#FDCB6E20" }]}>
+              <Text style={[styles.sourceText, { color: aiSource === "gemini" ? "#6C5CE7" : "#FDCB6E" }]}>
+                {aiSource === "gemini" ? "Gemini" : "Rule-based"}
+              </Text>
+            </View>
+          )}
+        </View>
+
+        {aiInsights.length === 0 && !aiLoading && !aiError && (
+          <Text style={[styles.geminiHint, { color: colors.mutedForeground }]}>
+            Analyze your finances with AI to get personalized, data-driven recommendations.
+          </Text>
+        )}
+
+        {aiError && (
+          <View style={[styles.aiError, { backgroundColor: "#FF6B6B15", borderColor: "#FF6B6B40" }]}>
+            <Ionicons name="wifi-outline" size={14} color="#FF6B6B" />
+            <Text style={[styles.aiErrorText, { color: "#FF6B6B" }]}>{aiError}</Text>
+          </View>
+        )}
+
+        {aiInsights.length > 0 && (
+          <View style={{ gap: 10, marginBottom: 14 }}>
+            {aiInsights.map((insight, i) => (
+              <View key={i} style={[styles.aiInsightRow, { backgroundColor: colors.background, borderColor: colors.border }]}>
+                <View style={[styles.aiInsightNum, { backgroundColor: "#6C5CE720" }]}>
+                  <Text style={[styles.aiInsightNumText, { color: "#6C5CE7" }]}>{i + 1}</Text>
+                </View>
+                <Text style={[styles.aiInsightText, { color: colors.foreground }]}>{insight}</Text>
+              </View>
+            ))}
+          </View>
+        )}
+
+        <TouchableOpacity
+          onPress={fetchAIInsights}
+          disabled={aiLoading}
+          activeOpacity={0.85}
+          style={[styles.analyzeBtn, { opacity: aiLoading ? 0.7 : 1 }]}
+        >
+          {aiLoading ? (
+            <ActivityIndicator size="small" color="#fff" />
+          ) : (
+            <Ionicons name="sparkles" size={16} color="#fff" />
+          )}
+          <Text style={styles.analyzeBtnText}>
+            {aiLoading ? "Analyzing…" : aiInsights.length > 0 ? "Refresh Analysis" : "Generate AI Analysis"}
+          </Text>
+        </TouchableOpacity>
+      </View>
+
       {/* AI Insights */}
       <Text style={[styles.sectionTitle, { color: colors.foreground }]}>
         Personalized Insights
@@ -491,4 +602,18 @@ const styles = StyleSheet.create({
   tipRow: { flexDirection: "row", alignItems: "flex-start", gap: 10, marginBottom: 10 },
   tipDot: { width: 6, height: 6, borderRadius: 3, marginTop: 6, flexShrink: 0 },
   tipText: { flex: 1, fontSize: 13, fontFamily: "Inter_400Regular", lineHeight: 19 },
+  geminiHeader: { flexDirection: "row", alignItems: "flex-start", gap: 12, marginBottom: 12 },
+  geminiIcon: { width: 38, height: 38, borderRadius: 11, alignItems: "center", justifyContent: "center", flexShrink: 0 },
+  geminiSub: { fontSize: 11, fontFamily: "Inter_400Regular" },
+  sourcePill: { borderRadius: 10, paddingHorizontal: 8, paddingVertical: 3, alignSelf: "flex-start" },
+  sourceText: { fontSize: 10, fontFamily: "Inter_700Bold" },
+  geminiHint: { fontSize: 13, fontFamily: "Inter_400Regular", lineHeight: 19, marginBottom: 14 },
+  aiError: { flexDirection: "row", alignItems: "center", gap: 8, borderRadius: 10, borderWidth: 1, padding: 10, marginBottom: 12 },
+  aiErrorText: { fontSize: 12, fontFamily: "Inter_400Regular", flex: 1 },
+  aiInsightRow: { flexDirection: "row", gap: 10, borderRadius: 12, borderWidth: 1, padding: 12 },
+  aiInsightNum: { width: 22, height: 22, borderRadius: 7, alignItems: "center", justifyContent: "center", flexShrink: 0 },
+  aiInsightNumText: { fontSize: 11, fontFamily: "Inter_700Bold" },
+  aiInsightText: { flex: 1, fontSize: 13, fontFamily: "Inter_400Regular", lineHeight: 19 },
+  analyzeBtn: { borderRadius: 12, height: 46, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, backgroundColor: "#6C5CE7" },
+  analyzeBtnText: { color: "#fff", fontSize: 14, fontFamily: "Inter_600SemiBold" },
 });

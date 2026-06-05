@@ -17,8 +17,11 @@ import { useCurrency, CURRENCIES, type CurrencyCode } from "@/context/CurrencyCo
 import { useCategoryBudgets } from "@/context/CategoryBudgetContext";
 import { useBackup } from "@/context/BackupContext";
 import { useAchievements } from "@/context/AchievementsContext";
+import { usePremium, PLANS, type PlanTier } from "@/context/PremiumContext";
+import { useNotifications } from "@/context/NotificationsContext";
 import { EXPENSE_CATEGORIES } from "@/constants/categories";
 import { CategoryIcon } from "@/components/CategoryIcon";
+import { Switch } from "react-native";
 
 type ThemeOption = "light" | "dark" | "system";
 
@@ -48,6 +51,8 @@ export default function ProfileScreen() {
 
   const { lastBackupAt, lastRestoreAt, isBackingUp, isRestoring, backup, restore } = useBackup();
   const { badges, xp, level, levelTitle, xpToNextLevel, xpProgress, earnedCount, totalCount } = useAchievements();
+  const { plan, planInfo, daysLeft, upgradeTo, cancelSubscription } = usePremium();
+  const { settings: notifSettings, permissionGranted, requestPermission, updateSetting: updateNotifSetting } = useNotifications();
   const [editingUsername, setEditingUsername]   = useState(false);
   const [newUsername,     setNewUsername]       = useState(user?.username ?? "");
   const [editingBudget,   setEditingBudget]     = useState(false);
@@ -485,17 +490,122 @@ export default function ProfileScreen() {
           </Text>
         </Section>
 
-        {/* Premium CTA */}
-        <TouchableOpacity onPress={() => router.push("/(tabs)/payment")} activeOpacity={0.85}>
-          <LinearGradient colors={["#4834D4", "#6C5CE7"]} style={styles.upgradeBanner} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}>
-            <Ionicons name="diamond" size={20} color="#FDCB6E" />
-            <View style={{ flex: 1 }}>
-              <Text style={styles.upgradeTitle}>Upgrade to Premium</Text>
-              <Text style={styles.upgradeSub}>Cloud backup · AI insights · Unlimited everything</Text>
+        {/* Notifications */}
+        <Section>
+          <SectionRow icon="notifications-outline" title="Notifications" />
+          {!permissionGranted && (
+            <TouchableOpacity
+              onPress={requestPermission}
+              style={[styles.permBanner, { backgroundColor: "#FDCB6E18", borderColor: "#FDCB6E40" }]}
+            >
+              <Ionicons name="alert-circle-outline" size={16} color="#FDCB6E" />
+              <Text style={[styles.permText, { color: "#FDCB6E" }]}>Tap to enable notification permissions</Text>
+            </TouchableOpacity>
+          )}
+          {[
+            { key: "budgetAlerts" as const, label: "Budget Alerts", desc: "Alert at 50%, 80%, 100% of budget", icon: "wallet-outline" },
+            { key: "goalReminders" as const, label: "Goal Reminders", desc: "7 days before goal deadline", icon: "trophy-outline" },
+            { key: "savingsReminders" as const, label: "Savings Reminders", desc: "Weekly savings tips", icon: "trending-up-outline" },
+            { key: "dailyReminder" as const, label: "Daily Check-in", desc: "Morning reminder to log expenses", icon: "time-outline" },
+            { key: "weeklyReport" as const, label: "Weekly Report", desc: "Sunday spending summary", icon: "bar-chart-outline" },
+          ].map((item, i, arr) => (
+            <View key={item.key}>
+              <View style={styles.notifRow}>
+                <View style={[styles.notifIconWrap, { backgroundColor: "#6C5CE720" }]}>
+                  <Ionicons name={item.icon as any} size={16} color="#6C5CE7" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.notifLabel, { color: colors.foreground }]}>{item.label}</Text>
+                  <Text style={[styles.notifDesc, { color: colors.mutedForeground }]}>{item.desc}</Text>
+                </View>
+                <Switch
+                  value={notifSettings[item.key]}
+                  onValueChange={(v) => { updateNotifSetting(item.key, v); Haptics.selectionAsync(); }}
+                  trackColor={{ false: colors.muted, true: "#6C5CE780" }}
+                  thumbColor={notifSettings[item.key] ? "#6C5CE7" : colors.mutedForeground}
+                />
+              </View>
+              {i < arr.length - 1 && <View style={[styles.divider, { backgroundColor: colors.border }]} />}
             </View>
-            <Ionicons name="chevron-forward" size={18} color="rgba(255,255,255,0.7)" />
+          ))}
+        </Section>
+
+        {/* Subscription Plan */}
+        <Section>
+          <SectionRow icon="diamond-outline" title="Subscription Plan" />
+          <LinearGradient
+            colors={planInfo.gradient}
+            style={styles.planCard}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+          >
+            <View style={{ flex: 1 }}>
+              <View style={styles.planBadgeRow}>
+                <Text style={styles.planName}>{planInfo.name}</Text>
+                {planInfo.badge && (
+                  <View style={styles.planBadge}>
+                    <Text style={styles.planBadgeText}>{planInfo.badge}</Text>
+                  </View>
+                )}
+              </View>
+              <Text style={styles.planPrice}>{planInfo.priceLabel}</Text>
+              {daysLeft !== null && (
+                <Text style={styles.planExpiry}>{daysLeft} days remaining</Text>
+              )}
+            </View>
+            <Ionicons name="diamond" size={28} color="rgba(255,255,255,0.4)" />
           </LinearGradient>
-        </TouchableOpacity>
+
+          {plan === "free" && (
+            <View style={{ gap: 8, marginTop: 4 }}>
+              {(["pro", "premium"] as PlanTier[]).map((tier) => {
+                const p = PLANS[tier];
+                return (
+                  <TouchableOpacity
+                    key={tier}
+                    onPress={() => {
+                      Alert.alert(
+                        `Upgrade to ${p.name}`,
+                        `${p.priceLabel}\n\nIncludes:\n${p.features.slice(0, 3).join("\n")}\n\nPayment integration coming soon. Demo upgrade?`,
+                        [
+                          { text: "Cancel", style: "cancel" },
+                          { text: "Demo Upgrade", onPress: () => upgradeTo(tier) },
+                        ]
+                      );
+                    }}
+                    style={[styles.upgradeRow, { borderColor: p.color + "50", backgroundColor: p.color + "0D" }]}
+                    activeOpacity={0.8}
+                  >
+                    <View style={[styles.upgradeIcon, { backgroundColor: p.color + "20" }]}>
+                      <Ionicons name="diamond" size={16} color={p.color} />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.upgradeRowTitle, { color: colors.foreground }]}>{p.name} — {p.priceLabel}</Text>
+                      <Text style={[styles.upgradeRowDesc, { color: colors.mutedForeground }]} numberOfLines={1}>
+                        {p.features[0]}
+                      </Text>
+                    </View>
+                    <View style={[styles.upgradeBtn, { backgroundColor: p.color }]}>
+                      <Text style={styles.upgradeBtnText}>Upgrade</Text>
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          )}
+
+          {plan !== "free" && (
+            <TouchableOpacity
+              onPress={() => Alert.alert("Cancel Subscription", "This will downgrade you to Free.", [
+                { text: "Keep Plan", style: "cancel" },
+                { text: "Cancel", style: "destructive", onPress: cancelSubscription },
+              ])}
+              style={styles.cancelPlanBtn}
+            >
+              <Text style={[styles.cancelPlanText, { color: colors.mutedForeground }]}>Cancel Subscription</Text>
+            </TouchableOpacity>
+          )}
+        </Section>
 
         {/* Logout */}
         <TouchableOpacity onPress={handleLogout} style={[styles.logoutBtn, { backgroundColor: "#FF6B6B15", borderColor: "#FF6B6B40" }]} activeOpacity={0.8}>
@@ -603,6 +713,27 @@ const styles = StyleSheet.create({
   upgradeSub: { color: "rgba(255,255,255,0.75)", fontSize: 12, fontFamily: "Inter_400Regular", marginTop: 2 },
   logoutBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, borderRadius: 16, padding: 16, borderWidth: 1 },
   logoutText: { fontSize: 16, fontFamily: "Inter_600SemiBold" },
+  notifRow: { flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 10 },
+  notifIconWrap: { width: 32, height: 32, borderRadius: 9, alignItems: "center", justifyContent: "center" },
+  notifLabel: { fontSize: 14, fontFamily: "Inter_600SemiBold", marginBottom: 1 },
+  notifDesc: { fontSize: 11, fontFamily: "Inter_400Regular" },
+  permBanner: { flexDirection: "row", alignItems: "center", gap: 8, borderRadius: 12, borderWidth: 1, padding: 12, marginBottom: 10 },
+  permText: { fontSize: 13, fontFamily: "Inter_500Medium", flex: 1 },
+  planCard: { borderRadius: 16, padding: 18, flexDirection: "row", alignItems: "center", marginBottom: 14 },
+  planBadgeRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 4 },
+  planName: { color: "#fff", fontSize: 20, fontFamily: "Inter_700Bold" },
+  planBadge: { backgroundColor: "rgba(255,255,255,0.25)", borderRadius: 10, paddingHorizontal: 8, paddingVertical: 2 },
+  planBadgeText: { color: "#fff", fontSize: 10, fontFamily: "Inter_700Bold" },
+  planPrice: { color: "rgba(255,255,255,0.8)", fontSize: 13, fontFamily: "Inter_400Regular" },
+  planExpiry: { color: "rgba(255,255,255,0.6)", fontSize: 11, fontFamily: "Inter_400Regular", marginTop: 2 },
+  upgradeRow: { flexDirection: "row", alignItems: "center", gap: 12, borderRadius: 14, borderWidth: 1, padding: 12 },
+  upgradeIcon: { width: 36, height: 36, borderRadius: 10, alignItems: "center", justifyContent: "center" },
+  upgradeRowTitle: { fontSize: 13, fontFamily: "Inter_700Bold", marginBottom: 2 },
+  upgradeRowDesc: { fontSize: 11, fontFamily: "Inter_400Regular" },
+  upgradeBtn: { borderRadius: 8, paddingHorizontal: 12, paddingVertical: 6 },
+  upgradeBtnText: { color: "#fff", fontSize: 12, fontFamily: "Inter_700Bold" },
+  cancelPlanBtn: { alignItems: "center", paddingVertical: 10, marginTop: 4 },
+  cancelPlanText: { fontSize: 13, fontFamily: "Inter_400Regular" },
   levelCard: { borderRadius: 16, padding: 16, flexDirection: "row", alignItems: "center", marginBottom: 14, gap: 12 },
   levelLabel: { color: "rgba(255,255,255,0.7)", fontSize: 11, fontFamily: "Inter_400Regular", marginBottom: 2 },
   levelTitle: { color: "#fff", fontSize: 18, fontFamily: "Inter_700Bold", marginBottom: 8 },

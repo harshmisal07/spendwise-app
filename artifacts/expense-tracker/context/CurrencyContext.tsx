@@ -38,6 +38,19 @@ function detectCurrency(): CurrencyCode {
   return "USD";
 }
 
+export const EXCHANGE_RATES: Record<CurrencyCode, number> = {
+  INR: 1,
+  USD: 0.012,
+  EUR: 0.011,
+  GBP: 0.0095,
+};
+
+export function convertAmount(amount: number, from: CurrencyCode, to: CurrencyCode): number {
+  if (from === to) return amount;
+  const inINR = amount / EXCHANGE_RATES[from];
+  return inINR * EXCHANGE_RATES[to];
+}
+
 type CurrencyContextType = {
   currency: CurrencyCode;
   info: CurrencyInfo;
@@ -45,6 +58,7 @@ type CurrencyContextType = {
   format: (n: number) => string;
   formatFull: (n: number) => string;
   symbol: string;
+  convert: (amount: number, from: CurrencyCode) => number;
 };
 
 const CurrencyContext = createContext<CurrencyContextType | undefined>(undefined);
@@ -91,8 +105,12 @@ export function CurrencyProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
+  const convert = useCallback((amount: number, from: CurrencyCode): number => {
+    return convertAmount(amount, from, currency);
+  }, [currency]);
+
   return (
-    <CurrencyContext.Provider value={{ currency, info, setCurrency, format, formatFull, symbol: info.symbol }}>
+    <CurrencyContext.Provider value={{ currency, info, setCurrency, format, formatFull, symbol: info.symbol, convert }}>
       {children}
     </CurrencyContext.Provider>
   );

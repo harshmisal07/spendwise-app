@@ -14,6 +14,7 @@ import { useCurrency, CURRENCIES } from "@/context/CurrencyContext";
 import { useColors } from "@/hooks/useColors";
 import { CategoryIcon } from "@/components/CategoryIcon";
 import type { RecurringInterval } from "@/context/TransactionContext";
+import VoiceInput, { type VoiceResult } from "@/components/VoiceInput";
 
 type TxType = "income" | "expense";
 
@@ -43,13 +44,27 @@ export default function AddTransactionScreen() {
   const { addTransaction }        = useTransactions();
   const { currency, symbol }      = useCurrency();
 
-  const [type,      setType]      = useState<TxType>("expense");
-  const [amount,    setAmount]    = useState("");
-  const [category,  setCategory]  = useState("food");
-  const [date,      setDate]      = useState(new Date());
-  const [notes,     setNotes]     = useState("");
-  const [recurring, setRecurring] = useState<RecurringInterval>("none");
-  const [saving,    setSaving]    = useState(false);
+  const [type,         setType]        = useState<TxType>("expense");
+  const [amount,       setAmount]      = useState("");
+  const [category,     setCategory]    = useState("food");
+  const [date,         setDate]        = useState(new Date());
+  const [notes,        setNotes]       = useState("");
+  const [recurring,    setRecurring]   = useState<RecurringInterval>("none");
+  const [saving,       setSaving]      = useState(false);
+  const [voiceVisible, setVoiceVisible] = useState(false);
+
+  function handleVoiceResult(result: VoiceResult) {
+    setVoiceVisible(false);
+    if (result.type) setType(result.type);
+    if (result.amount && !isNaN(result.amount)) setAmount(result.amount.toString());
+    if (result.note) setNotes(result.note);
+    if (result.category) {
+      const allCats = [...EXPENSE_CATEGORIES, ...INCOME_CATEGORIES];
+      const match = allCats.find((c) => c.id === result.category || c.name.toLowerCase().includes(result.category!));
+      if (match) setCategory(match.id);
+    }
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+  }
 
   const catList   = type === "income" ? INCOME_CATEGORIES : EXPENSE_CATEGORIES;
   const isIncome  = type === "income";
@@ -89,7 +104,9 @@ export default function AddTransactionScreen() {
           <Ionicons name="close" size={22} color="rgba(255,255,255,0.9)" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Add Transaction</Text>
-        <View style={{ width: 40 }} />
+        <TouchableOpacity onPress={() => setVoiceVisible(true)} style={styles.closeBtn}>
+          <Ionicons name="mic" size={22} color="rgba(255,255,255,0.9)" />
+        </TouchableOpacity>
       </LinearGradient>
 
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={{ flex: 1 }}>
@@ -191,8 +208,22 @@ export default function AddTransactionScreen() {
               <Text style={styles.saveBtnText}>{saving ? "Saving…" : "Save Transaction"}</Text>
             </LinearGradient>
           </TouchableOpacity>
+
+          {/* Voice input hint */}
+          <TouchableOpacity onPress={() => setVoiceVisible(true)} style={[styles.voiceHint, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <Ionicons name="mic-outline" size={16} color="#6C5CE7" />
+            <Text style={[styles.voiceHintText, { color: colors.mutedForeground }]}>
+              Or tap the mic to add by voice
+            </Text>
+          </TouchableOpacity>
         </ScrollView>
       </KeyboardAvoidingView>
+
+      <VoiceInput
+        visible={voiceVisible}
+        onResult={handleVoiceResult}
+        onClose={() => setVoiceVisible(false)}
+      />
     </View>
   );
 }
@@ -227,4 +258,6 @@ const styles = StyleSheet.create({
   notesInput: { borderRadius: 14, borderWidth: 1, padding: 14, fontSize: 15, fontFamily: "Inter_400Regular", minHeight: 84, marginBottom: 28, textAlignVertical: "top" },
   saveBtn: { borderRadius: 16, height: 58, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10, shadowColor: "#6C5CE7", shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.35, shadowRadius: 12, elevation: 6 },
   saveBtnText: { color: "#fff", fontSize: 17, fontFamily: "Inter_700Bold" },
+  voiceHint: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, borderRadius: 12, borderWidth: 1, padding: 12, marginTop: 12 },
+  voiceHintText: { fontSize: 13, fontFamily: "Inter_400Regular" },
 });

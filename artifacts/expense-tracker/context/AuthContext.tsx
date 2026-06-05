@@ -17,6 +17,8 @@ type AuthContextType = {
   register: (username: string, email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   updateUser: (updates: Partial<User>) => Promise<void>;
+  resetPassword: (email: string, newPassword: string) => Promise<void>;
+  emailExists: (email: string) => Promise<boolean>;
 };
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -103,8 +105,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
+  async function resetPassword(email: string, newPassword: string) {
+    const users = await getUsers();
+    const idx = users.findIndex((u) => u.email.toLowerCase() === email.toLowerCase());
+    if (idx < 0) throw new Error("No account found with this email");
+    users[idx] = { ...users[idx]!, password: newPassword };
+    await saveUsers(users);
+    if (user && user.email.toLowerCase() === email.toLowerCase()) {
+      const updated = { ...user, password: newPassword };
+      setUser(updated);
+      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+    }
+  }
+
+  async function emailExists(email: string): Promise<boolean> {
+    const users = await getUsers();
+    return users.some((u) => u.email.toLowerCase() === email.toLowerCase());
+  }
+
   return (
-    <AuthContext.Provider value={{ user, isLoading, login, register, logout, updateUser }}>
+    <AuthContext.Provider value={{ user, isLoading, login, register, logout, updateUser, resetPassword, emailExists }}>
       {children}
     </AuthContext.Provider>
   );
