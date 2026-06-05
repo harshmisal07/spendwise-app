@@ -10,6 +10,7 @@ import { useTransactions } from "@/context/TransactionContext";
 import { useGoals } from "@/context/GoalsContext";
 import { useCurrency } from "@/context/CurrencyContext";
 import { useCategoryBudgets } from "@/context/CategoryBudgetContext";
+import { useAchievements } from "@/context/AchievementsContext";
 import { useColors } from "@/hooks/useColors";
 import { SummaryCard } from "@/components/SummaryCard";
 import { TransactionCard } from "@/components/TransactionCard";
@@ -22,17 +23,26 @@ function greet() {
   return "Good evening";
 }
 
+function computeHealthScore(savingsRate: number, budgetPercent: number, budgetSet: boolean, goalProgress: number, hasGoals: boolean, txCount: number): number {
+  const savingsPts = Math.min((savingsRate / 20) * 40, 40);
+  const budgetPts  = budgetSet ? Math.max(0, ((100 - budgetPercent) / 100) * 25) : 12;
+  const goalPts    = hasGoals ? Math.min((goalProgress / 100) * 20, 20) : 10;
+  const actPts     = Math.min((txCount / 30) * 15, 15);
+  return Math.round(savingsPts + budgetPts + goalPts + actPts);
+}
+
 export default function DashboardScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
   const { format } = useCurrency();
   const {
-    transactions, totalIncome, totalExpenses, balance, deleteTransaction,
+    transactions, totalIncome, totalExpenses, balance, savings, deleteTransaction,
     todayExpenses, thisMonthExpenses, budgetRemaining, budgetPercent,
   } = useTransactions();
   const { goals } = useGoals();
   const { overBudgetCategories, nearLimitCategories } = useCategoryBudgets();
+  const { xp, level, levelTitle, earnedCount } = useAchievements();
 
   const recent = transactions.slice(0, 6);
   const topPad = Platform.OS === "web" ? 67 : insets.top;
@@ -45,7 +55,6 @@ export default function DashboardScreen() {
     budgetPercent >= 80  ? "danger" :
     budgetPercent >= 50  ? "warning" : null;
 
-  // Recurring transactions due today
   const recurringDue = useMemo(() => {
     const recurring = transactions.filter((t) => t.recurring && t.recurring !== "none");
     const byCategory: Record<string, typeof transactions[0]> = {};
@@ -63,6 +72,30 @@ export default function DashboardScreen() {
       return false;
     });
   }, [transactions]);
+
+  const goalProgress = useMemo(() => {
+    const total = goals.reduce((s, g) => s + g.targetAmount, 0);
+    const saved = goals.reduce((s, g) => s + g.savedAmount, 0);
+    return total > 0 ? (saved / total) * 100 : 0;
+  }, [goals]);
+
+  const savingsRate = totalIncome > 0 ? Math.max(0, ((totalIncome - totalExpenses) / totalIncome) * 100) : 0;
+  const healthScore = useMemo(() =>
+    computeHealthScore(savingsRate, budgetPercent, (user?.budgetLimit ?? 0) > 0, goalProgress, goals.length > 0, transactions.length),
+    [savingsRate, budgetPercent, user?.budgetLimit, goalProgress, goals.length, transactions.length]
+  );
+
+  const healthColor =
+    healthScore >= 80 ? "#00B894" :
+    healthScore >= 60 ? "#74B9FF" :
+    healthScore >= 40 ? "#FDCB6E" :
+    "#FF6B6B";
+
+  const healthLabel =
+    healthScore >= 80 ? "Excellent" :
+    healthScore >= 60 ? "Good" :
+    healthScore >= 40 ? "Average" :
+    "Needs Work";
 
   function handleDelete(id: string) {
     Alert.alert("Delete Transaction", "Are you sure?", [
@@ -161,9 +194,9 @@ export default function DashboardScreen() {
         {/* Smart Stats Row */}
         <View style={styles.smartRow}>
           {[
-            { label: "Today", value: format(todayExpenses), color: "#FF6B6B", icon: "today", bg: "#FF6B6B18" },
-            { label: "This Month", value: format(thisMonthExpenses), color: "#6C5CE7", icon: "calendar", bg: "#6C5CE718" },
-            { label: "Budget Left", value: format(budgetRemaining), color: "#00B894", icon: "shield-checkmark", bg: "#00B89418" },
+            { label: "Today",      value: format(todayExpenses),    color: "#FF6B6B", icon: "today",            bg: "#FF6B6B18" },
+            { label: "This Month", value: format(thisMonthExpenses), color: "#6C5CE7", icon: "calendar",         bg: "#6C5CE718" },
+            { label: "Budget Left",value: format(budgetRemaining),  color: "#00B894", icon: "shield-checkmark", bg: "#00B89418" },
           ].map((s) => (
             <View key={s.label} style={[styles.smartCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
               <View style={[styles.smartIcon, { backgroundColor: s.bg }]}>
@@ -180,11 +213,56 @@ export default function DashboardScreen() {
           <SummaryCard title="Total Balance" amount={balance} variant="balance" />
         </View>
 
-        {/* Income / Expense / Savings row */}
+        {/* Income / Expense row */}
         <View style={styles.row}>
           <SummaryCard title="Income" amount={totalIncome} variant="income" compact />
           <SummaryCard title="Expenses" amount={totalExpenses} variant="expense" compact />
         </View>
+
+        {/* Financial Health Score */}
+        <TouchableOpacity onPress={() => router.push("/(tabs)/ai-coach")} activeOpacity={0.85}>
+          <View style={[styles.healthCard, { backgroundColor: colors.card, borderColor: healthColor + "40" }]}>
+            <View style={styles.healthLeft}>
+              <View style={styles.healthTitleRow}>
+                <View style={[styles.healthIconWrap, { backgroundColor: healthColor + "20" }]}>
+                  <Ionicons name="heart" size={14} color={healthColor} />
+                </View>
+                <Text style={[styles.healthTitle, { color: colors.foreground }]}>Financial Health</Text>
+                <View style={[styles.healthBadge, { backgroundColor: healthColor + "20" }]}>
+                  <Text style={[styles.healthBadgeText, { color: healthColor }]}>{healthLabel}</Text>
+                </View>
+              </View>
+              <View style={[styles.healthBarBg, { backgroundColor: colors.muted }]}>
+                <LinearGradient
+                  colors={[healthColor + "CC", healthColor]}
+                  style={[styles.healthBarFill, { width: `${healthScore}%` }]}
+                  start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+                />
+              </View>
+              <Text style={[styles.healthHint, { color: colors.mutedForeground }]}>
+                Tap for AI insights & recommendations
+              </Text>
+            </View>
+            <View style={styles.healthRight}>
+              <Text style={[styles.healthScore, { color: healthColor }]}>{healthScore}</Text>
+              <Text style={[styles.healthMax, { color: colors.mutedForeground }]}>/100</Text>
+            </View>
+          </View>
+        </TouchableOpacity>
+
+        {/* XP / Level Strip */}
+        {transactions.length > 0 && (
+          <TouchableOpacity onPress={() => router.push("/(tabs)/profile")} activeOpacity={0.85}>
+            <LinearGradient colors={["#4834D4", "#6C5CE7"]} style={styles.xpStrip} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}>
+              <Ionicons name="star" size={14} color="#FDCB6E" />
+              <Text style={styles.xpText}>Level {level} · {levelTitle}</Text>
+              <View style={styles.xpSpacer} />
+              <Text style={styles.xpBadgeCount}>{earnedCount} badges</Text>
+              <Text style={styles.xpVal}>{xp} XP</Text>
+              <Ionicons name="chevron-forward" size={14} color="rgba(255,255,255,0.6)" />
+            </LinearGradient>
+          </TouchableOpacity>
+        )}
 
         {/* Budget Progress */}
         {user?.budgetLimit ? (
@@ -304,6 +382,24 @@ const styles = StyleSheet.create({
   smartValue: { fontSize: 13, fontFamily: "Inter_700Bold" },
   balanceCard: { marginBottom: 12 },
   row: { flexDirection: "row", gap: 12, marginBottom: 12 },
+  healthCard: { borderRadius: 18, padding: 16, borderWidth: 1.5, marginBottom: 12, flexDirection: "row", alignItems: "center", gap: 12 },
+  healthLeft: { flex: 1, gap: 8 },
+  healthTitleRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+  healthIconWrap: { width: 24, height: 24, borderRadius: 7, alignItems: "center", justifyContent: "center" },
+  healthTitle: { fontSize: 13, fontFamily: "Inter_600SemiBold", flex: 1 },
+  healthBadge: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 8 },
+  healthBadgeText: { fontSize: 11, fontFamily: "Inter_700Bold" },
+  healthBarBg: { height: 6, borderRadius: 3, overflow: "hidden" },
+  healthBarFill: { height: "100%", borderRadius: 3 },
+  healthHint: { fontSize: 10, fontFamily: "Inter_400Regular" },
+  healthRight: { alignItems: "center" },
+  healthScore: { fontSize: 32, fontFamily: "Inter_700Bold", lineHeight: 36 },
+  healthMax: { fontSize: 11, fontFamily: "Inter_400Regular" },
+  xpStrip: { flexDirection: "row", alignItems: "center", gap: 8, borderRadius: 14, padding: 12, marginBottom: 12 },
+  xpText: { color: "#fff", fontSize: 13, fontFamily: "Inter_600SemiBold" },
+  xpSpacer: { flex: 1 },
+  xpBadgeCount: { color: "rgba(255,255,255,0.7)", fontSize: 12, fontFamily: "Inter_400Regular" },
+  xpVal: { color: "#FDCB6E", fontSize: 14, fontFamily: "Inter_700Bold" },
   budgetCard: { borderRadius: 18, padding: 16, borderWidth: 1, marginBottom: 16, gap: 8 },
   budgetHeader: { flexDirection: "row", alignItems: "center", gap: 8 },
   budgetIcon: { width: 26, height: 26, borderRadius: 8, alignItems: "center", justifyContent: "center" },

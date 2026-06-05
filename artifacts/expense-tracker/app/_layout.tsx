@@ -16,6 +16,8 @@ import { TransactionProvider } from "@/context/TransactionContext";
 import { GoalsProvider } from "@/context/GoalsContext";
 import { CategoryBudgetProvider } from "@/context/CategoryBudgetContext";
 import { BackupProvider } from "@/context/BackupContext";
+import { AchievementsProvider } from "@/context/AchievementsContext";
+import { ChallengesProvider } from "@/context/ChallengesContext";
 
 SplashScreen.preventAutoHideAsync();
 const queryClient = new QueryClient();
@@ -58,11 +60,15 @@ export default function RootLayout() {
                 <TransactionProvider>
                   <GoalsProvider>
                     <CategoryBudgetProvider>
-                      <AuthenticatedProviders>
-                        <GestureHandlerRootView style={{ flex: 1 }}>
-                          <RootLayoutNav />
-                        </GestureHandlerRootView>
-                      </AuthenticatedProviders>
+                      <AchievementsProvider>
+                        <ChallengesProvider>
+                          <AuthenticatedProviders>
+                            <GestureHandlerRootView style={{ flex: 1 }}>
+                              <RootLayoutNav />
+                            </GestureHandlerRootView>
+                          </AuthenticatedProviders>
+                        </ChallengesProvider>
+                      </AchievementsProvider>
                     </CategoryBudgetProvider>
                   </GoalsProvider>
                 </TransactionProvider>

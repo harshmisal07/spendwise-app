@@ -16,6 +16,7 @@ import { useGoals } from "@/context/GoalsContext";
 import { useCurrency, CURRENCIES, type CurrencyCode } from "@/context/CurrencyContext";
 import { useCategoryBudgets } from "@/context/CategoryBudgetContext";
 import { useBackup } from "@/context/BackupContext";
+import { useAchievements } from "@/context/AchievementsContext";
 import { EXPENSE_CATEGORIES } from "@/constants/categories";
 import { CategoryIcon } from "@/components/CategoryIcon";
 
@@ -46,6 +47,7 @@ export default function ProfileScreen() {
   const { budgets, setBudget, removeBudget, getCategorySpent, getCategoryPercent } = useCategoryBudgets();
 
   const { lastBackupAt, lastRestoreAt, isBackingUp, isRestoring, backup, restore } = useBackup();
+  const { badges, xp, level, levelTitle, xpToNextLevel, xpProgress, earnedCount, totalCount } = useAchievements();
   const [editingUsername, setEditingUsername]   = useState(false);
   const [newUsername,     setNewUsername]       = useState(user?.username ?? "");
   const [editingBudget,   setEditingBudget]     = useState(false);
@@ -200,6 +202,68 @@ export default function ProfileScreen() {
             </View>
           ))}
         </View>
+
+        {/* Achievements & XP */}
+        <Section>
+          <SectionRow icon="trophy-outline" title="Achievements & XP" />
+          {/* Level Card */}
+          <LinearGradient colors={["#4834D4", "#6C5CE7"]} style={styles.levelCard} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.levelLabel}>Level {level}</Text>
+              <Text style={styles.levelTitle}>{levelTitle}</Text>
+              <View style={styles.xpBarBg}>
+                <View style={[styles.xpBarFill, { width: `${xpProgress}%` }]} />
+              </View>
+              <Text style={styles.xpHint}>
+                {xp} XP · {xpToNextLevel > 0 ? `${xpToNextLevel} XP to next level` : "Max Level!"}
+              </Text>
+            </View>
+            <View style={styles.levelBadge}>
+              <Text style={styles.levelBadgeNum}>{level}</Text>
+            </View>
+          </LinearGradient>
+
+          {/* Badges Summary */}
+          <View style={styles.badgeSummary}>
+            <View style={[styles.badgeSummaryItem, { borderColor: colors.border }]}>
+              <Text style={[styles.badgeSummaryNum, { color: "#FDCB6E" }]}>{earnedCount}</Text>
+              <Text style={[styles.badgeSummaryLabel, { color: colors.mutedForeground }]}>Earned</Text>
+            </View>
+            <View style={[styles.badgeSummaryItem, { borderColor: colors.border }]}>
+              <Text style={[styles.badgeSummaryNum, { color: colors.mutedForeground }]}>{totalCount - earnedCount}</Text>
+              <Text style={[styles.badgeSummaryLabel, { color: colors.mutedForeground }]}>Locked</Text>
+            </View>
+            <View style={[styles.badgeSummaryItem, { borderColor: colors.border }]}>
+              <Text style={[styles.badgeSummaryNum, { color: "#6C5CE7" }]}>{xp}</Text>
+              <Text style={[styles.badgeSummaryLabel, { color: colors.mutedForeground }]}>Total XP</Text>
+            </View>
+          </View>
+
+          {/* Badge Grid */}
+          <View style={styles.badgeGrid}>
+            {badges.map((badge) => (
+              <View key={badge.id} style={[styles.badgeCard, {
+                backgroundColor: badge.earned ? badge.color + "15" : colors.muted,
+                borderColor: badge.earned ? badge.color + "50" : colors.border,
+                opacity: badge.earned ? 1 : 0.5,
+              }]}>
+                <View style={[styles.badgeIconWrap, { backgroundColor: badge.earned ? badge.color + "25" : colors.background }]}>
+                  <Ionicons name={badge.icon as any} size={18} color={badge.earned ? badge.color : colors.mutedForeground} />
+                </View>
+                <Text style={[styles.badgeTitle, { color: badge.earned ? colors.foreground : colors.mutedForeground }]} numberOfLines={2}>
+                  {badge.title}
+                </Text>
+                {badge.earned ? (
+                  <View style={[styles.badgeXpPill, { backgroundColor: badge.color + "25" }]}>
+                    <Text style={[styles.badgeXpText, { color: badge.color }]}>+{badge.xp} XP</Text>
+                  </View>
+                ) : (
+                  <Text style={[styles.badgeLocked, { color: colors.mutedForeground }]}>{badge.description.split(" ").slice(0, 3).join(" ")}…</Text>
+                )}
+              </View>
+            ))}
+          </View>
+        </Section>
 
         {/* Currency Selector */}
         <Section>
@@ -539,6 +603,25 @@ const styles = StyleSheet.create({
   upgradeSub: { color: "rgba(255,255,255,0.75)", fontSize: 12, fontFamily: "Inter_400Regular", marginTop: 2 },
   logoutBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, borderRadius: 16, padding: 16, borderWidth: 1 },
   logoutText: { fontSize: 16, fontFamily: "Inter_600SemiBold" },
+  levelCard: { borderRadius: 16, padding: 16, flexDirection: "row", alignItems: "center", marginBottom: 14, gap: 12 },
+  levelLabel: { color: "rgba(255,255,255,0.7)", fontSize: 11, fontFamily: "Inter_400Regular", marginBottom: 2 },
+  levelTitle: { color: "#fff", fontSize: 18, fontFamily: "Inter_700Bold", marginBottom: 8 },
+  xpBarBg: { height: 5, borderRadius: 3, backgroundColor: "rgba(255,255,255,0.2)", overflow: "hidden", marginBottom: 6 },
+  xpBarFill: { height: "100%", borderRadius: 3, backgroundColor: "#FDCB6E" },
+  xpHint: { color: "rgba(255,255,255,0.7)", fontSize: 11, fontFamily: "Inter_400Regular" },
+  levelBadge: { width: 54, height: 54, borderRadius: 27, backgroundColor: "rgba(255,255,255,0.2)", alignItems: "center", justifyContent: "center" },
+  levelBadgeNum: { color: "#fff", fontSize: 26, fontFamily: "Inter_700Bold" },
+  badgeSummary: { flexDirection: "row", marginBottom: 14, borderRadius: 12, overflow: "hidden" },
+  badgeSummaryItem: { flex: 1, alignItems: "center", paddingVertical: 10, borderRightWidth: 1 },
+  badgeSummaryNum: { fontSize: 18, fontFamily: "Inter_700Bold", marginBottom: 2 },
+  badgeSummaryLabel: { fontSize: 10, fontFamily: "Inter_400Regular" },
+  badgeGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  badgeCard: { width: "30.5%", borderRadius: 14, padding: 10, borderWidth: 1, alignItems: "center", gap: 5 },
+  badgeIconWrap: { width: 36, height: 36, borderRadius: 10, alignItems: "center", justifyContent: "center" },
+  badgeTitle: { fontSize: 11, fontFamily: "Inter_600SemiBold", textAlign: "center", lineHeight: 14 },
+  badgeXpPill: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 },
+  badgeXpText: { fontSize: 10, fontFamily: "Inter_700Bold" },
+  badgeLocked: { fontSize: 9, fontFamily: "Inter_400Regular", textAlign: "center", lineHeight: 12 },
   modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "flex-end" },
   modalSheet: { borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, paddingBottom: 40 },
   modalHandle: { width: 40, height: 4, borderRadius: 2, backgroundColor: "#B2BEC3", alignSelf: "center", marginBottom: 20 },

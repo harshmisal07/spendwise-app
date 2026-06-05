@@ -1,5 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
+import * as Print from "expo-print";
+import * as Sharing from "expo-sharing";
 import React, { useMemo, useState } from "react";
 import { Alert, Platform, ScrollView, Share, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -23,6 +25,7 @@ export default function AnalyticsScreen() {
   const { goals } = useGoals();
   const { format, formatFull, info: currencyInfo } = useCurrency();
   const [period, setPeriod] = useState<Period>("monthly");
+  const [exporting, setExporting] = useState(false);
   const topPad = Platform.OS === "web" ? 67 : insets.top;
   const bottomPad = Platform.OS === "web" ? 34 + 84 : 100;
   const now = new Date();
@@ -48,7 +51,6 @@ export default function AnalyticsScreen() {
         return { label: MONTHS[d.getMonth()], income: filt("income"), expense: filt("expense") };
       });
     }
-    // yearly — 12 months of current year
     return Array.from({ length: 12 }, (_, i) => {
       const d = new Date(now.getFullYear(), i, 1);
       const filt = (type: string) => transactions.filter((t) => {
@@ -60,7 +62,6 @@ export default function AnalyticsScreen() {
   }, [transactions, period]);
 
   const maxBar = Math.max(...barData.map((d) => Math.max(d.income, d.expense)), 1);
-
   const yearTotalIncome   = barData.reduce((s, d) => s + d.income, 0);
   const yearTotalExpenses = barData.reduce((s, d) => s + d.expense, 0);
 
@@ -82,29 +83,156 @@ export default function AnalyticsScreen() {
 
   const savingsRate = totalIncome > 0 ? ((totalIncome - totalExpenses) / totalIncome) * 100 : 0;
 
-  function generateReport(type: "monthly" | "yearly") {
-    const period = type === "monthly"
+  // ── CSV Export ──
+  async function exportCSV() {
+    if (transactions.length === 0) { Alert.alert("No Data", "Add some transactions first."); return; }
+    setExporting(true);
+    try {
+      const header = "Date,Type,Category,Amount,Currency,Notes,Recurring";
+      const rows = transactions.map((t) => {
+        const cat = getCategoryById(t.category).name;
+        const notes = `"${(t.notes ?? "").replace(/"/g, '""')}"`;
+        return [t.date, t.type, cat, t.amount.toFixed(2), currencyInfo.code, notes, t.recurring ?? "none"].join(",");
+      });
+      const csv = [header, ...rows].join("\n");
+
+      if (Platform.OS === "web") {
+        const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+        const url  = URL.createObjectURL(blob);
+        const a    = document.createElement("a");
+        a.href     = url;
+        a.download = `spendwise_transactions_${now.toISOString().split("T")[0]}.csv`;
+        a.click();
+        URL.revokeObjectURL(url);
+      } else {
+        await Share.share({
+          message: csv,
+          title: `SpendWise Transactions — ${now.toLocaleDateString()}`,
+        });
+      }
+    } catch (e) {
+      Alert.alert("Export Failed", "Unable to export CSV.");
+    }
+    setExporting(false);
+  }
+
+  // ── PDF Export ──
+  async function exportPDF(type: "monthly" | "yearly") {
+    if (transactions.length === 0) { Alert.alert("No Data", "Add some transactions first."); return; }
+    setExporting(true);
+    try {
+      const periodLabel = type === "monthly"
+        ? `${MONTHS[now.getMonth()]} ${now.getFullYear()}`
+        : `Year ${now.getFullYear()}`;
+      const inc  = type === "monthly" ? thisMonthIncome   : totalIncome;
+      const exp  = type === "monthly" ? thisMonthExpenses : totalExpenses;
+      const net  = inc - exp;
+      const rate = inc > 0 ? Math.max(((inc - exp) / inc) * 100, 0) : 0;
+
+      const catRows = topCategories.slice(0, 8).map((c) =>
+        `<tr><td>${c.cat.name}</td><td style="text-align:right;color:#FF6B6B">${formatFull(c.amount)}</td><td style="text-align:right;color:#999">${totalExpenses > 0 ? ((c.amount / totalExpenses) * 100).toFixed(1) : 0}%</td></tr>`
+      ).join("");
+
+      const goalRows = goals.map((g) => {
+        const pct = g.targetAmount > 0 ? Math.min((g.savedAmount / g.targetAmount) * 100, 100) : 0;
+        return `<tr><td>${g.name}</td><td style="text-align:right;color:#6C5CE7">${formatFull(g.savedAmount)}</td><td style="text-align:right">${formatFull(g.targetAmount)}</td><td style="text-align:right;color:#00B894">${pct.toFixed(0)}%</td></tr>`;
+      }).join("");
+
+      const html = `
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8"/>
+<style>
+  body{font-family:'Helvetica Neue',Arial,sans-serif;margin:0;padding:32px;color:#1a1a2e;background:#fff;}
+  .header{background:linear-gradient(135deg,#4834D4,#6C5CE7);color:#fff;padding:28px 32px;border-radius:16px;margin-bottom:28px;}
+  .header h1{margin:0 0 6px;font-size:26px;font-weight:800;}
+  .header p{margin:0;opacity:0.8;font-size:13px;}
+  .section{margin-bottom:24px;}
+  .section h2{font-size:14px;font-weight:700;color:#6C5CE7;text-transform:uppercase;letter-spacing:1px;margin-bottom:12px;padding-bottom:6px;border-bottom:2px solid #E8EAF6;}
+  .cards{display:flex;gap:12px;margin-bottom:24px;}
+  .card{flex:1;padding:18px;border-radius:12px;background:#F8F9FF;border:1px solid #E8EAF6;}
+  .card .label{font-size:11px;color:#8B8FA8;margin-bottom:6px;}
+  .card .value{font-size:22px;font-weight:800;}
+  .income{color:#00B894;}  .expense{color:#FF6B6B;}  .balance{color:#6C5CE7;}  .rate{color:#74B9FF;}
+  table{width:100%;border-collapse:collapse;font-size:13px;}
+  th{background:#F0F2FF;padding:10px 12px;text-align:left;font-weight:600;color:#1a1a2e;}
+  td{padding:9px 12px;border-bottom:1px solid #F0F2FF;}
+  tr:last-child td{border-bottom:none;}
+  .footer{text-align:center;color:#8B8FA8;font-size:11px;margin-top:32px;padding-top:16px;border-top:1px solid #E8EAF6;}
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>📊 SpendWise ${type === "monthly" ? "Monthly" : "Yearly"} Report</h1>
+  <p>${periodLabel} · ${currencyInfo.code} · ${user?.username ?? "User"} · ${user?.email ?? ""}</p>
+</div>
+<div class="cards">
+  <div class="card"><div class="label">INCOME</div><div class="value income">${formatFull(inc)}</div></div>
+  <div class="card"><div class="label">EXPENSES</div><div class="value expense">${formatFull(exp)}</div></div>
+  <div class="card"><div class="label">NET BALANCE</div><div class="value balance">${formatFull(net)}</div></div>
+  <div class="card"><div class="label">SAVINGS RATE</div><div class="value rate">${rate.toFixed(1)}%</div></div>
+</div>
+${topCategories.length > 0 ? `
+<div class="section">
+  <h2>Top Expense Categories</h2>
+  <table>
+    <tr><th>Category</th><th style="text-align:right">Amount</th><th style="text-align:right">% of Expenses</th></tr>
+    ${catRows}
+  </table>
+</div>` : ""}
+${goals.length > 0 ? `
+<div class="section">
+  <h2>Savings Goals</h2>
+  <table>
+    <tr><th>Goal</th><th style="text-align:right">Saved</th><th style="text-align:right">Target</th><th style="text-align:right">Progress</th></tr>
+    ${goalRows}
+  </table>
+</div>` : ""}
+<div class="section">
+  <h2>Transaction Summary</h2>
+  <table>
+    <tr><th>Metric</th><th style="text-align:right">Value</th></tr>
+    <tr><td>Total Transactions</td><td style="text-align:right">${transactions.length}</td></tr>
+    <tr><td>Income Entries</td><td style="text-align:right">${transactions.filter(t=>t.type==="income").length}</td></tr>
+    <tr><td>Expense Entries</td><td style="text-align:right">${transactions.filter(t=>t.type==="expense").length}</td></tr>
+    <tr><td>Average Transaction</td><td style="text-align:right">${transactions.length > 0 ? formatFull((inc + exp) / transactions.length) : "—"}</td></tr>
+  </table>
+</div>
+<div class="footer">Generated by SpendWise · ${new Date().toLocaleDateString()} · ${new Date().toLocaleTimeString()}</div>
+</body>
+</html>`;
+
+      if (Platform.OS === "web") {
+        const win = window.open("", "_blank");
+        if (win) { win.document.write(html); win.document.close(); win.print(); }
+        else { Alert.alert("Blocked", "Please allow popups to export PDF."); }
+      } else {
+        const { uri } = await Print.printToFileAsync({ html, base64: false });
+        const canShare = await Sharing.isAvailableAsync();
+        if (canShare) {
+          await Sharing.shareAsync(uri, { mimeType: "application/pdf", dialogTitle: `SpendWise ${type === "monthly" ? "Monthly" : "Yearly"} Report` });
+        } else {
+          await Print.printAsync({ uri });
+        }
+      }
+    } catch (e) {
+      Alert.alert("Export Failed", "Unable to generate PDF report.");
+    }
+    setExporting(false);
+  }
+
+  function generateTextReport(type: "monthly" | "yearly") {
+    const periodStr = type === "monthly"
       ? `${MONTHS[now.getMonth()]} ${now.getFullYear()}`
       : `Year ${now.getFullYear()}`;
     const inc  = type === "monthly" ? thisMonthIncome   : totalIncome;
     const exp  = type === "monthly" ? thisMonthExpenses : totalExpenses;
     const net  = inc - exp;
     const rate = inc > 0 ? ((inc - exp) / inc * 100) : 0;
-
     const topCatLines = topCategories.slice(0, 5)
       .map((c, i) => `  ${i + 1}. ${c.cat.name.padEnd(16)} ${formatFull(c.amount).padStart(12)}`)
       .join("\n");
-
-    const monthlyBreakdown = type === "yearly"
-      ? "\n\n📅 MONTHLY BREAKDOWN\n" +
-        MONTHS.map((m, i) => {
-          const md = new Date(now.getFullYear(), i, 1);
-          const me = transactions.filter((t) => t.type === "expense" && new Date(t.date+"T12:00:00").getMonth() === i && new Date(t.date+"T12:00:00").getFullYear() === now.getFullYear()).reduce((s, t) => s + t.amount, 0);
-          const mi = transactions.filter((t) => t.type === "income"  && new Date(t.date+"T12:00:00").getMonth() === i && new Date(t.date+"T12:00:00").getFullYear() === now.getFullYear()).reduce((s, t) => s + t.amount, 0);
-          return `  ${m}: Income ${format(mi).padStart(10)}  |  Expense ${format(me).padStart(10)}`;
-        }).join("\n")
-      : "";
-
     const goalSummary = goals.length > 0
       ? "\n\n🏆 SAVINGS GOALS\n" +
         goals.map((g) => {
@@ -113,11 +241,10 @@ export default function AnalyticsScreen() {
           return `  ${g.name.padEnd(18)} ${bar} ${pct.toFixed(0).padStart(3)}%\n  ${format(g.savedAmount)} saved of ${format(g.targetAmount)}`;
         }).join("\n\n")
       : "";
-
     const report = `
 ╔══════════════════════════════════════╗
 ║      📊 SPENDWISE ${type.toUpperCase()} REPORT      ║
-║      ${period.padEnd(22)} · ${currencyInfo.code}   ║
+║      ${periodStr.padEnd(22)} · ${currencyInfo.code}   ║
 ╚══════════════════════════════════════╝
 
 👤 ${user?.username ?? "User"} · ${user?.email ?? ""}
@@ -138,14 +265,13 @@ ${topCatLines || "  No expenses recorded"}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 📈 TRANSACTION COUNT
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  Total transactions:  ${transactions.length}
-  Income entries:      ${transactions.filter((t) => t.type === "income").length}
-  Expense entries:     ${transactions.filter((t) => t.type === "expense").length}${monthlyBreakdown}${goalSummary}
+  Total:    ${transactions.length}
+  Income:   ${transactions.filter((t) => t.type === "income").length}
+  Expense:  ${transactions.filter((t) => t.type === "expense").length}${goalSummary}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 Generated by SpendWise · ${new Date().toLocaleDateString()}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`.trim();
-
     if (Platform.OS === "web") {
       Alert.alert(`${type === "monthly" ? "Monthly" : "Yearly"} Report`, report);
     } else {
@@ -160,22 +286,33 @@ Generated by SpendWise · ${new Date().toLocaleDateString()}
       <View style={styles.headerRow}>
         <Text style={[styles.pageTitle, { color: colors.foreground }]}>Analytics</Text>
         <View style={styles.exportBtns}>
-          <TouchableOpacity onPress={() => generateReport("monthly")} style={[styles.exportBtn, { backgroundColor: colors.card, borderColor: colors.border }]}>
-            <Ionicons name="share-outline" size={14} color="#6C5CE7" />
-            <Text style={[styles.exportText, { color: "#6C5CE7" }]}>Month</Text>
+          <TouchableOpacity onPress={exportCSV} disabled={exporting} style={[styles.exportBtn, { backgroundColor: "#00B89415", borderColor: "#00B89440" }]}>
+            <Ionicons name="download-outline" size={14} color="#00B894" />
+            <Text style={[styles.exportText, { color: "#00B894" }]}>CSV</Text>
           </TouchableOpacity>
-          <TouchableOpacity onPress={() => generateReport("yearly")} style={[styles.exportBtn, { backgroundColor: "#6C5CE720", borderColor: "#6C5CE740" }]}>
-            <Ionicons name="document-text-outline" size={14} color="#6C5CE7" />
-            <Text style={[styles.exportText, { color: "#6C5CE7" }]}>Year</Text>
+          <TouchableOpacity onPress={() => exportPDF("monthly")} disabled={exporting} style={[styles.exportBtn, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <Ionicons name="document-outline" size={14} color="#6C5CE7" />
+            <Text style={[styles.exportText, { color: "#6C5CE7" }]}>PDF</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => generateTextReport("monthly")} style={[styles.exportBtn, { backgroundColor: "#6C5CE720", borderColor: "#6C5CE740" }]}>
+            <Ionicons name="share-outline" size={14} color="#6C5CE7" />
+            <Text style={[styles.exportText, { color: "#6C5CE7" }]}>Share</Text>
           </TouchableOpacity>
         </View>
       </View>
 
+      {exporting && (
+        <View style={[styles.exportingBanner, { backgroundColor: "#6C5CE710", borderColor: "#6C5CE730" }]}>
+          <Ionicons name="hourglass-outline" size={14} color="#6C5CE7" />
+          <Text style={[styles.exportingText, { color: "#6C5CE7" }]}>Generating export…</Text>
+        </View>
+      )}
+
       {/* Quick Stats */}
       <View style={styles.statsRow}>
         {[
-          { label: "Income", value: format(totalIncome), color: "#00B894", icon: "arrow-up-circle" },
-          { label: "Expenses", value: format(totalExpenses), color: "#FF6B6B", icon: "arrow-down-circle" },
+          { label: "Income",    value: format(totalIncome),    color: "#00B894", icon: "arrow-up-circle"   },
+          { label: "Expenses",  value: format(totalExpenses),  color: "#FF6B6B", icon: "arrow-down-circle" },
           { label: "Savings %", value: `${Math.max(savingsRate, 0).toFixed(0)}%`, color: "#74B9FF", icon: "trending-up" },
         ].map((s) => (
           <View key={s.label} style={[styles.statCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
@@ -193,9 +330,9 @@ Generated by SpendWise · ${new Date().toLocaleDateString()}
         <Text style={[styles.cardTitle, { color: colors.foreground }]}>{MONTHS[now.getMonth()]} {now.getFullYear()} · Monthly</Text>
         <View style={styles.monthRow}>
           {[
-            { label: "Income", v: format(thisMonthIncome), color: "#00B894" },
+            { label: "Income",   v: format(thisMonthIncome),  color: "#00B894" },
             { label: "Expenses", v: format(thisMonthExpenses), color: "#FF6B6B" },
-            { label: "Net", v: (thisMonthIncome - thisMonthExpenses >= 0 ? "+" : "") + format(thisMonthIncome - thisMonthExpenses), color: thisMonthIncome - thisMonthExpenses >= 0 ? "#00B894" : "#FF6B6B" },
+            { label: "Net",      v: (thisMonthIncome - thisMonthExpenses >= 0 ? "+" : "") + format(thisMonthIncome - thisMonthExpenses), color: thisMonthIncome - thisMonthExpenses >= 0 ? "#00B894" : "#FF6B6B" },
           ].map((s) => (
             <View key={s.label} style={styles.monthItem}>
               <Text style={[styles.monthLabel, { color: colors.mutedForeground }]}>{s.label}</Text>
@@ -222,9 +359,17 @@ Generated by SpendWise · ${new Date().toLocaleDateString()}
 
       {/* Bar Chart */}
       <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
-        <Text style={[styles.cardTitle, { color: colors.foreground }]}>
-          {period === "weekly" ? "Last 7 Days" : period === "monthly" ? "Last 6 Months" : `${now.getFullYear()} by Month`}
-        </Text>
+        <View style={styles.cardTitleRow}>
+          <Text style={[styles.cardTitle, { color: colors.foreground, marginBottom: 0 }]}>
+            {period === "weekly" ? "Last 7 Days" : period === "monthly" ? "Last 6 Months" : `${now.getFullYear()} by Month`}
+          </Text>
+          {period === "yearly" && (
+            <TouchableOpacity onPress={() => generateTextReport("yearly")} style={[styles.miniExportBtn, { backgroundColor: "#6C5CE710" }]}>
+              <Ionicons name="share-outline" size={12} color="#6C5CE7" />
+              <Text style={[styles.miniExportText, { color: "#6C5CE7" }]}>Year</Text>
+            </TouchableOpacity>
+          )}
+        </View>
         {period === "yearly" && (
           <View style={styles.yearSummaryRow}>
             <View style={styles.yearSummaryItem}>
@@ -318,9 +463,9 @@ Generated by SpendWise · ${new Date().toLocaleDateString()}
           <Text style={[styles.cardTitle, { color: colors.foreground }]}>Goals Overview</Text>
           <View style={styles.goalsStatsRow}>
             {[
-              { label: "Active", value: goals.filter((g) => g.savedAmount < g.targetAmount).length.toString(), color: "#6C5CE7" },
-              { label: "Completed", value: goals.filter((g) => g.savedAmount >= g.targetAmount).length.toString(), color: "#00B894" },
-              { label: "Total Saved", value: format(goals.reduce((s, g) => s + g.savedAmount, 0)), color: "#74B9FF" },
+              { label: "Active",     value: goals.filter((g) => g.savedAmount < g.targetAmount).length.toString(), color: "#6C5CE7" },
+              { label: "Completed",  value: goals.filter((g) => g.savedAmount >= g.targetAmount).length.toString(), color: "#00B894" },
+              { label: "Total Saved",value: format(goals.reduce((s, g) => s + g.savedAmount, 0)), color: "#74B9FF" },
             ].map((s) => (
               <View key={s.label} style={[styles.goalStatItem, { borderColor: colors.border }]}>
                 <Text style={[styles.goalStatValue, { color: s.color }]}>{s.value}</Text>
@@ -353,9 +498,9 @@ Generated by SpendWise · ${new Date().toLocaleDateString()}
         <Text style={[styles.cardTitle, { color: colors.foreground }]}>All-Time Summary</Text>
         <View style={styles.vsRow}>
           {[
-            { label: "Income", v: formatFull(totalIncome), color: "#00B894" },
+            { label: "Income",  v: formatFull(totalIncome),  color: "#00B894" },
             { label: "Expense", v: formatFull(totalExpenses), color: "#FF6B6B" },
-            { label: "Net", v: formatFull(balance), color: balance >= 0 ? "#00B894" : "#FF6B6B" },
+            { label: "Net",     v: formatFull(balance),      color: balance >= 0 ? "#00B894" : "#FF6B6B" },
           ].map((s, i) => (
             <React.Fragment key={s.label}>
               <View style={styles.vsItem}>
@@ -380,16 +525,21 @@ const styles = StyleSheet.create({
   scroll: { paddingHorizontal: 16 },
   headerRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 16 },
   pageTitle: { fontSize: 26, fontFamily: "Inter_700Bold" },
-  exportBtns: { flexDirection: "row", gap: 8 },
-  exportBtn: { flexDirection: "row", alignItems: "center", gap: 5, borderRadius: 10, paddingHorizontal: 10, paddingVertical: 7, borderWidth: 1 },
+  exportBtns: { flexDirection: "row", gap: 7 },
+  exportBtn: { flexDirection: "row", alignItems: "center", gap: 4, borderRadius: 10, paddingHorizontal: 9, paddingVertical: 7, borderWidth: 1 },
   exportText: { fontSize: 12, fontFamily: "Inter_600SemiBold" },
+  exportingBanner: { flexDirection: "row", alignItems: "center", gap: 8, borderRadius: 10, borderWidth: 1, paddingHorizontal: 12, paddingVertical: 8, marginBottom: 12 },
+  exportingText: { fontSize: 13, fontFamily: "Inter_500Medium" },
   statsRow: { flexDirection: "row", gap: 10, marginBottom: 16 },
   statCard: { flex: 1, borderRadius: 16, padding: 12, borderWidth: 1, alignItems: "flex-start", gap: 4 },
   statIcon: { width: 30, height: 30, borderRadius: 10, alignItems: "center", justifyContent: "center", marginBottom: 2 },
   statValue: { fontSize: 14, fontFamily: "Inter_700Bold", width: "100%" },
   statLabel: { fontSize: 11, fontFamily: "Inter_400Regular" },
   card: { borderRadius: 20, padding: 20, borderWidth: 1, marginBottom: 16 },
+  cardTitleRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 14 },
   cardTitle: { fontSize: 16, fontFamily: "Inter_700Bold", marginBottom: 14 },
+  miniExportBtn: { flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 },
+  miniExportText: { fontSize: 11, fontFamily: "Inter_600SemiBold" },
   monthRow: { flexDirection: "row", gap: 4 },
   monthItem: { flex: 1, alignItems: "center", gap: 4 },
   monthLabel: { fontSize: 11, fontFamily: "Inter_400Regular" },
@@ -426,12 +576,12 @@ const styles = StyleSheet.create({
   goalsStatsRow: { flexDirection: "row", marginBottom: 16, borderRadius: 14, overflow: "hidden" },
   goalStatItem: { flex: 1, alignItems: "center", paddingVertical: 12, borderRightWidth: 1 },
   goalStatValue: { fontSize: 18, fontFamily: "Inter_700Bold", marginBottom: 2 },
-  goalStatLabel: { fontSize: 11, fontFamily: "Inter_400Regular" },
-  vsRow: { flexDirection: "row", alignItems: "center", marginBottom: 14 },
-  vsItem: { flex: 1, alignItems: "center" },
-  vsLabel: { fontSize: 11, fontFamily: "Inter_400Regular", marginBottom: 4 },
-  vsAmount: { fontSize: 13, fontFamily: "Inter_700Bold" },
-  vsDivider: { width: 1, height: 40 },
+  goalStatLabel: { fontSize: 10, fontFamily: "Inter_400Regular" },
+  vsRow: { flexDirection: "row", gap: 4, marginBottom: 14 },
+  vsItem: { flex: 1, alignItems: "center", gap: 4 },
+  vsLabel: { fontSize: 11, fontFamily: "Inter_400Regular" },
+  vsAmount: { fontSize: 13, fontFamily: "Inter_700Bold", textAlign: "center", width: "100%" },
+  vsDivider: { width: 1, height: 36, alignSelf: "center" },
   vsBar: { height: 8, borderRadius: 4, overflow: "hidden" },
   vsBarFill: { height: "100%", borderRadius: 4 },
 });

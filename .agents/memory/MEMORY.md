@@ -1,0 +1,2 @@
+- [SpendWise Provider Tree](spendwise-providers.md) — AchievementsProvider and ChallengesProvider must sit inside TransactionProvider+GoalsProvider, outside BackupProvider.
+- [SpendWise Category Export](spendwise-categories.md) — getCategoryById() is now a named export from constants/categories.ts; prefer it over inline CATEGORIES.find().
