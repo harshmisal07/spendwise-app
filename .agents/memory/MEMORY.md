@@ -1,2 +1,3 @@
 - [SpendWise Provider Tree](spendwise-providers.md) — AchievementsProvider and ChallengesProvider must sit inside TransactionProvider+GoalsProvider, outside BackupProvider.
 - [SpendWise Category Export](spendwise-categories.md) — getCategoryById() is now a named export from constants/categories.ts; prefer it over inline CATEGORIES.find().
+- [expo-notifications version](expo-notifications-version.md) — pin to 0.29.14 on SDK 54; v0.32.x crashes Metro with ENOENT on postinstall tmp dir.
