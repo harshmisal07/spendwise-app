@@ -2,6 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import React, { useCallback, useMemo, useState } from "react";
 import { ActivityIndicator, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTransactions } from "@/context/TransactionContext";
 import { useGoals } from "@/context/GoalsContext";
@@ -384,6 +385,29 @@ export default function AICoachScreen() {
         </View>
       </View>
 
+      {/* Chat with AI Entry */}
+      <TouchableOpacity onPress={() => router.push("/ai-chat")} activeOpacity={0.85}>
+        <LinearGradient
+          colors={["#2D1B8E", "#4834D4", "#6C5CE7"]}
+          style={styles.chatBanner}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 0 }}
+        >
+          <View style={styles.chatBannerLeft}>
+            <View style={styles.chatBannerIcon}>
+              <Ionicons name="chatbubbles" size={20} color="#6C5CE7" />
+            </View>
+            <View>
+              <Text style={styles.chatBannerTitle}>Ask AI Anything</Text>
+              <Text style={styles.chatBannerSub}>Chat with Gemini about your finances</Text>
+            </View>
+          </View>
+          <View style={styles.chatBannerArrow}>
+            <Ionicons name="arrow-forward" size={16} color="rgba(255,255,255,0.9)" />
+          </View>
+        </LinearGradient>
+      </TouchableOpacity>
+
       {/* Health Score Card */}
       <LinearGradient colors={["#4834D4", "#6C5CE7", "#A29BFE"]} style={styles.scoreCard} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
         <View style={styles.scoreLeft}>
@@ -598,6 +622,26 @@ const styles = StyleSheet.create({
   insightBody: { fontSize: 12, fontFamily: "Inter_400Regular", lineHeight: 18 },
   emptyCard: { borderRadius: 16, padding: 40, borderWidth: 1, alignItems: "center", gap: 12 },
   emptyText: { fontSize: 14, fontFamily: "Inter_400Regular", textAlign: "center" },
+  chatBanner: {
+    borderRadius: 18, padding: 16, flexDirection: "row",
+    alignItems: "center", justifyContent: "space-between",
+    marginBottom: 16,
+    shadowColor: "#4834D4", shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.35, shadowRadius: 12, elevation: 6,
+  },
+  chatBannerLeft: { flexDirection: "row", alignItems: "center", gap: 12 },
+  chatBannerIcon: {
+    width: 42, height: 42, borderRadius: 13,
+    backgroundColor: "rgba(255,255,255,0.9)",
+    alignItems: "center", justifyContent: "center",
+  },
+  chatBannerTitle: { color: "#fff", fontSize: 15, fontFamily: "Inter_700Bold" },
+  chatBannerSub: { color: "rgba(255,255,255,0.75)", fontSize: 11, fontFamily: "Inter_400Regular", marginTop: 1 },
+  chatBannerArrow: {
+    width: 30, height: 30, borderRadius: 15,
+    backgroundColor: "rgba(255,255,255,0.2)",
+    alignItems: "center", justifyContent: "center",
+  },
   tipsHeader: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 14 },
   tipRow: { flexDirection: "row", alignItems: "flex-start", gap: 10, marginBottom: 10 },
   tipDot: { width: 6, height: 6, borderRadius: 3, marginTop: 6, flexShrink: 0 },
