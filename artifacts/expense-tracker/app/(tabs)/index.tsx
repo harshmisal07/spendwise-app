@@ -2,11 +2,12 @@ import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
-import React, { useMemo } from "react";
+import React, { useEffect, useMemo, useRef } from "react";
 import { Alert, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "@/context/AuthContext";
 import { useTransactions } from "@/context/TransactionContext";
+import { useNotifications } from "@/context/NotificationsContext";
 import { useGoals } from "@/context/GoalsContext";
 import { useCurrency } from "@/context/CurrencyContext";
 import { useCategoryBudgets } from "@/context/CategoryBudgetContext";
@@ -43,6 +44,19 @@ export default function DashboardScreen() {
   const { goals } = useGoals();
   const { overBudgetCategories, nearLimitCategories } = useCategoryBudgets();
   const { xp, level, levelTitle, earnedCount } = useAchievements();
+  const { sendBudgetAlert, settings: notifSettings } = useNotifications();
+
+  const prevBudgetTierRef = useRef<string | null>(null);
+  useEffect(() => {
+    const budgetLimit = user?.budgetLimit ?? 0;
+    if (!notifSettings.budgetAlerts || budgetLimit <= 0) return;
+    const tier = budgetPercent >= 100 ? "over" : budgetPercent >= 80 ? "near" : "ok";
+    if (tier !== "ok" && tier !== prevBudgetTierRef.current) {
+      const symbol = "₹";
+      sendBudgetAlert(budgetPercent, budgetLimit, symbol);
+    }
+    prevBudgetTierRef.current = tier;
+  }, [budgetPercent, user?.budgetLimit, notifSettings.budgetAlerts]);
 
   const recent = transactions.slice(0, 6);
   const topPad = Platform.OS === "web" ? 67 : insets.top;

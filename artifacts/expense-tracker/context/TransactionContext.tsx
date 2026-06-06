@@ -22,6 +22,7 @@ type TransactionContextType = {
   addTransaction: (t: Omit<Transaction, "id" | "createdAt">) => Promise<void>;
   updateTransaction: (id: string, t: Partial<Transaction>) => Promise<void>;
   deleteTransaction: (id: string) => Promise<void>;
+  reload: () => Promise<void>;
   totalIncome: number;
   totalExpenses: number;
   balance: number;
@@ -32,6 +33,7 @@ type TransactionContextType = {
   thisMonthExpenses: number;
   budgetRemaining: number;
   budgetPercent: number;
+  rawBudgetPercent: number;
 };
 
 const TransactionContext = createContext<TransactionContextType | undefined>(undefined);
@@ -95,7 +97,6 @@ export function TransactionProvider({ children }: { children: React.ReactNode })
   const totalExpenses = transactions.filter((t) => t.type === "expense").reduce((s, t) => s + t.amount, 0);
   const balance = totalIncome - totalExpenses;
   const savings = balance > 0 ? balance : 0;
-  const isOverBudget = user ? totalExpenses > user.budgetLimit : false;
 
   const todayExpenses = transactions
     .filter((t) => t.type === "expense" && isSameDay(t.date, now))
@@ -110,15 +111,19 @@ export function TransactionProvider({ children }: { children: React.ReactNode })
     .reduce((s, t) => s + t.amount, 0);
 
   const budgetLimit = user?.budgetLimit ?? 0;
+  const isOverBudget = budgetLimit > 0 ? thisMonthExpenses > budgetLimit : false;
   const budgetRemaining = Math.max(budgetLimit - thisMonthExpenses, 0);
-  const budgetPercent = budgetLimit > 0 ? Math.min((thisMonthExpenses / budgetLimit) * 100, 100) : 0;
+  const rawBudgetPercent = budgetLimit > 0 ? (thisMonthExpenses / budgetLimit) * 100 : 0;
+  const budgetPercent = Math.min(rawBudgetPercent, 100);
 
   return (
     <TransactionContext.Provider
       value={{
         transactions, isLoading, addTransaction, updateTransaction, deleteTransaction,
+        reload: loadTransactions,
         totalIncome, totalExpenses, balance, savings, isOverBudget,
-        todayExpenses, thisMonthIncome, thisMonthExpenses, budgetRemaining, budgetPercent,
+        todayExpenses, thisMonthIncome, thisMonthExpenses, budgetRemaining,
+        budgetPercent, rawBudgetPercent,
       }}
     >
       {children}

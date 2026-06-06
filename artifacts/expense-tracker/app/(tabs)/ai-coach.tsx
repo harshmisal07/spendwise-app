@@ -248,15 +248,15 @@ export default function AICoachScreen() {
   const { format } = useCurrency();
   const {
     transactions, totalIncome, totalExpenses, balance,
-    thisMonthIncome, thisMonthExpenses, budgetPercent, budgetRemaining,
+    thisMonthIncome, thisMonthExpenses, budgetPercent, rawBudgetPercent, budgetRemaining,
   } = useTransactions();
   const { goals } = useGoals();
   const topPad    = Platform.OS === "web" ? 67 : insets.top;
   const bottomPad = Platform.OS === "web" ? 34 + 84 : 110;
   const budgetLimit = user?.budgetLimit ?? 0;
 
-  const savingsRate = totalIncome > 0
-    ? Math.max(0, ((totalIncome - totalExpenses) / totalIncome) * 100)
+  const savingsRate = thisMonthIncome > 0
+    ? Math.max(0, ((thisMonthIncome - thisMonthExpenses) / thisMonthIncome) * 100)
     : 0;
 
   const goalProgress = useMemo(() => {
@@ -316,7 +316,7 @@ export default function AICoachScreen() {
           monthlyIncome: thisMonthIncome,
           monthlyExpenses: thisMonthExpenses,
           savingsRate,
-          budgetPercent,
+          budgetPercent: rawBudgetPercent,
           budgetLimit,
           balance,
           topCategories,

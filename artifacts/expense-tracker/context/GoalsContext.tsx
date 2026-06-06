@@ -20,6 +20,7 @@ type GoalsContextType = {
   updateGoal: (id: string, updates: Partial<Goal>) => Promise<void>;
   addToSaved: (id: string, amount: number) => Promise<void>;
   deleteGoal: (id: string) => Promise<void>;
+  reload: () => Promise<void>;
   totalSaved: number;
   totalTarget: number;
 };
@@ -87,7 +88,7 @@ export function GoalsProvider({ children }: { children: React.ReactNode }) {
   const totalTarget = goals.reduce((s, g) => s + g.targetAmount, 0);
 
   return (
-    <GoalsContext.Provider value={{ goals, isLoading, addGoal, updateGoal, addToSaved, deleteGoal, totalSaved, totalTarget }}>
+    <GoalsContext.Provider value={{ goals, isLoading, addGoal, updateGoal, addToSaved, deleteGoal, reload: load, totalSaved, totalTarget }}>
       {children}
     </GoalsContext.Provider>
   );

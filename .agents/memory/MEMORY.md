@@ -1,3 +1,3 @@
-- [SpendWise Provider Tree](spendwise-providers.md) — AchievementsProvider and ChallengesProvider must sit inside TransactionProvider+GoalsProvider, outside BackupProvider.
-- [SpendWise Category Export](spendwise-categories.md) — getCategoryById() is now a named export from constants/categories.ts; prefer it over inline CATEGORIES.find().
-- [expo-notifications version](expo-notifications-version.md) — pin to 0.29.14 on SDK 54; v0.32.x crashes Metro with ENOENT on postinstall tmp dir.
+- [expo-notifications version lock](expo-notifications.md) — must stay at 0.29.14; v0.32.x causes Metro ENOENT crash on SDK 54.
+- [db schema push required](db-push.md) — `pnpm --filter @workspace/db run push` must be run after adding new tables; cloud_backups table needed this.
+- [BackupContext provider order](backup-provider.md) — BackupProvider is inside TransactionProvider+GoalsProvider in the tree, so it can call useTransactions()/useGoals() safely.

@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   Alert, KeyboardAvoidingView, Modal, Platform, ScrollView,
   StyleSheet, Text, TextInput, TouchableOpacity, View,
@@ -12,6 +12,7 @@ import { useCurrency } from "@/context/CurrencyContext";
 import { useColors } from "@/hooks/useColors";
 import { useChallenges } from "@/context/ChallengesContext";
 import { useAchievements } from "@/context/AchievementsContext";
+import { useNotifications } from "@/context/NotificationsContext";
 
 type Tab = "goals" | "challenges";
 
@@ -42,6 +43,16 @@ export default function GoalsScreen() {
   const { format, symbol } = useCurrency();
   const { challenges, activeChallenges, joinChallenge, leaveChallenge, getStatus, getProgress, getActiveDays } = useChallenges();
   const { xp, level, levelTitle } = useAchievements();
+  const { sendGoalReminder, settings: notifSettings } = useNotifications();
+
+  useEffect(() => {
+    if (!notifSettings.goalReminders || goals.length === 0) return;
+    goals.forEach((g) => {
+      if (g.savedAmount >= g.targetAmount) return;
+      const diff = Math.ceil((new Date(g.targetDate).getTime() - Date.now()) / 86400000);
+      if (diff >= 0 && diff <= 7) sendGoalReminder(g.name, diff);
+    });
+  }, [goals, notifSettings.goalReminders]);
 
   const topPad    = Platform.OS === "web" ? 67 : insets.top;
   const bottomPad = Platform.OS === "web" ? 34 + 84 : 110;

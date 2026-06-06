@@ -1,6 +1,8 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import React, { createContext, useCallback, useContext, useEffect, useState } from "react";
 import { useAuth } from "./AuthContext";
+import { useTransactions } from "./TransactionContext";
+import { useGoals } from "./GoalsContext";
 
 const BACKUP_META_KEY = "@spendwise_backup_meta";
 const API_BASE = `https://${process.env.EXPO_PUBLIC_DOMAIN}/api`;
@@ -25,6 +27,8 @@ export function BackupProvider({ children, userId }: { children: React.ReactNode
   const [meta, setMeta] = useState<BackupMeta>({ lastBackupAt: null, lastRestoreAt: null });
   const [isBackingUp,  setIsBackingUp]  = useState(false);
   const [isRestoring,  setIsRestoring]  = useState(false);
+  const { reload: reloadTransactions } = useTransactions();
+  const { reload: reloadGoals } = useGoals();
 
   useEffect(() => {
     if (!userId) return;
@@ -86,6 +90,7 @@ export function BackupProvider({ children, userId }: { children: React.ReactNode
       ]);
       const lastRestoreAt = new Date().toISOString();
       await saveMeta({ ...meta, lastRestoreAt });
+      await Promise.all([reloadTransactions(), reloadGoals()]);
       return { success: true, message: `Restored from ${formatTime(data.backedUpAt)}` };
     } catch (err: any) {
       return { success: false, message: err?.message ?? "Restore failed" };

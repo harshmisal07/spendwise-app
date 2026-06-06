@@ -121,7 +121,7 @@ export default function ProfileScreen() {
             const result = await restore();
             if (result.success) {
               Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-              Alert.alert("Restored ✓", `${result.message}. Please restart the app to see changes.`);
+              Alert.alert("Restored ✓", result.message);
             } else {
               Alert.alert("Restore Failed", result.message);
             }
