@@ -120,7 +120,7 @@ export default function AIChatScreen() {
     Haptics.selectionAsync();
 
     try {
-      const apiBase = `https://${process.env.EXPO_PUBLIC_DOMAIN}/api`;
+      const apiBase ="http://10.128.49.176:3000/api";
       const history = [...messages, userMsg]
         .filter((m) => !m.loading && m.id !== "welcome")
         .map((m) => ({ role: m.role, content: m.content }));

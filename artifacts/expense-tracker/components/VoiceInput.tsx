@@ -1,3 +1,4 @@
+import * as SpeechRecognition from "expo-speech-recognition";
 import { Ionicons } from "@expo/vector-icons";
 import React, { useEffect, useRef, useState } from "react";
 import {
@@ -78,49 +79,66 @@ export default function VoiceInput({ visible, onResult, onClose }: VoiceInputPro
   const [lang, setLang] = useState<"en-IN" | "hi-IN" | "mr-IN">("en-IN");
   const recognitionRef = useRef<any>(null);
 
-  const supportsVoice = Platform.OS === "web" && typeof window !== "undefined"
-    && ("SpeechRecognition" in window || "webkitSpeechRecognition" in window);
-
+  const supportsVoice = true;
   useEffect(() => {
     if (!visible) { stopListening(); setTranscript(""); setStatus("idle"); }
   }, [visible]);
 
-  function startListening() {
-    if (!supportsVoice) {
-      Alert.alert(
-        "Voice Unavailable",
-        "Voice input works on supported browsers. On the mobile app, tap the mic to use your device's keyboard voice input.",
-      );
-      return;
-    }
-    try {
-      const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-      const recognition = new SpeechRecognition();
-      recognition.lang = lang;
-      recognition.interimResults = true;
-      recognition.maxAlternatives = 1;
-      recognition.continuous = false;
+  async function startListening() {
+  if (Platform.OS !== "web") {
+ Alert.alert(
+  "Feature Under Development",
+  "Voice-powered expense tracking will be available in a future release."
+);
+return;
+}
 
-      recognition.onstart = () => setStatus("listening");
-      recognition.onresult = (event: any) => {
-        const t = Array.from(event.results as any[])
-          .map((r: any) => r[0].transcript)
-          .join(" ");
-        setTranscript(t);
-        if (event.results[event.results.length - 1].isFinal) {
-          setStatus("processing");
-          const parsed = parseTranscript(t);
-          setTimeout(() => { onResult(parsed); }, 400);
-        }
-      };
-      recognition.onerror = () => setStatus("error");
-      recognition.onend = () => { if (status === "listening") setStatus("idle"); };
+  try {
+    const SpeechRecognition =
+      (window as any).SpeechRecognition ||
+      (window as any).webkitSpeechRecognition;
 
-      recognitionRef.current = recognition;
-      recognition.start();
-    } catch { setStatus("error"); }
+    const recognition = new SpeechRecognition();
+
+    recognition.lang = lang;
+    recognition.interimResults = true;
+    recognition.maxAlternatives = 1;
+    recognition.continuous = false;
+
+    recognition.onstart = () => setStatus("listening");
+
+    recognition.onresult = (event: any) => {
+      const t = Array.from(event.results as any[])
+        .map((r: any) => r[0].transcript)
+        .join(" ");
+
+      setTranscript(t);
+
+      if (event.results[event.results.length - 1].isFinal) {
+        setStatus("processing");
+
+        const parsed = parseTranscript(t);
+
+        setTimeout(() => {
+          onResult(parsed);
+        }, 400);
+      }
+    };
+
+    recognition.onerror = () => setStatus("error");
+
+    recognition.onend = () => {
+      if (status === "listening") {
+        setStatus("idle");
+      }
+    };
+
+    recognitionRef.current = recognition;
+    recognition.start();
+  } catch {
+    setStatus("error");
   }
-
+}
   function stopListening() {
     try { recognitionRef.current?.stop(); } catch {}
     recognitionRef.current = null;

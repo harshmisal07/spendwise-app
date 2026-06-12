@@ -23,7 +23,7 @@ router.post("/ai-chat", async (req, res) => {
     return res.status(400).json({ error: "messages array is required" });
   }
 
-  const apiKey = process.env["GEMINI_API_KEY"];
+const apiKey = process.env.GEMINI_API_KEY;
 
   if (!apiKey) {
     return res.json({

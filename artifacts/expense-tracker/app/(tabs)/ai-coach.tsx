@@ -308,7 +308,7 @@ export default function AICoachScreen() {
     setAiLoading(true);
     setAiError(null);
     try {
-      const apiBase = `https://${process.env.EXPO_PUBLIC_DOMAIN}/api`;
+      const apiBase = "http://10.128.49.176:3000";
       const res = await fetch(`${apiBase}/ai-insights`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },

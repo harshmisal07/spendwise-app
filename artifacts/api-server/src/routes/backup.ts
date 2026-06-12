@@ -14,25 +14,34 @@ function isValidPayload(body: unknown): body is { transactions: unknown[]; goals
 router.get("/backup/:userId", async (req, res) => {
   try {
     const { userId } = req.params;
-    const rows = await db.select().from(cloudBackupsTable).where(eq(cloudBackupsTable.userId, userId));
+
+    const rows = await db
+      .select()
+      .from(cloudBackupsTable)
+      .where(eq(cloudBackupsTable.userId, userId));
+
     if (rows.length === 0) {
       res.status(404).json({ error: "No backup found" });
       return;
     }
+
     const row = rows[0]!;
+
     res.json({
-      transactions:    row.transactions,
-      goals:           row.goals,
+      transactions: row.transactions,
+      goals: row.goals,
       categoryBudgets: row.categoryBudgets,
-      currency:        row.currency,
-      backedUpAt:      row.backedUpAt,
+      currency: row.currency,
+      backedUpAt: row.backedUpAt,
     });
   } catch (err) {
-    req.log.error({ err }, "Failed to fetch backup");
-    res.status(500).json({ error: "Internal server error" });
+    console.error("BACKUP ERROR:", err);
+    res.status(500).json({
+      error: "Internal server error",
+      details: String(err),
+    });
   }
 });
-
 // POST /api/backup/:userId — save / update cloud backup
 router.post("/backup/:userId", async (req, res) => {
   try {
@@ -42,18 +51,32 @@ router.post("/backup/:userId", async (req, res) => {
       return;
     }
     const { transactions, goals, categoryBudgets, currency } = req.body;
-    await db
-      .insert(cloudBackupsTable)
-      .values({ userId, transactions, goals, categoryBudgets, currency })
-      .onConflictDoUpdate({
-        target: cloudBackupsTable.userId,
-        set: { transactions, goals, categoryBudgets, currency, backedUpAt: new Date() },
-      });
+    console.log("POST BODY:", req.body);
+
+await db
+  .insert(cloudBackupsTable)
+  .values({ userId, transactions, goals, categoryBudgets, currency })
+  .onConflictDoUpdate({
+    target: cloudBackupsTable.userId,
+    set: {
+      transactions,
+      goals,
+      categoryBudgets,
+      currency,
+      backedUpAt: new Date()
+    }
+  });
+
+console.log("INSERT SUCCESS");
     res.json({ success: true, backedUpAt: new Date() });
-  } catch (err) {
-    req.log.error({ err }, "Failed to save backup");
-    res.status(500).json({ error: "Internal server error" });
-  }
+ } catch (err) {
+  console.error("BACKUP ERROR:", err);
+
+  res.status(500).json({
+    error: "Internal server error",
+    details: String(err)
+  });
+}
 });
 
 export default router;

@@ -5,7 +5,7 @@ import { useTransactions } from "./TransactionContext";
 import { useGoals } from "./GoalsContext";
 
 const BACKUP_META_KEY = "@spendwise_backup_meta";
-const API_BASE = `https://${process.env.EXPO_PUBLIC_DOMAIN}/api`;
+const API_BASE = `http://${process.env.EXPO_PUBLIC_DOMAIN}/api`;
 
 type BackupMeta = {
   lastBackupAt: string | null;
