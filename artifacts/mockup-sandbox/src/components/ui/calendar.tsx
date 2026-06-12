@@ -129,7 +129,7 @@ function Calendar({
           return (
             <div
               data-slot="calendar"
-              ref={rootRef}
+              ref={rootRef as React.Ref<HTMLDivElement>}
               className={cn(className)}
               {...props}
             />
@@ -151,7 +151,7 @@ function Calendar({
           }
 
           return (
-            <ChevronDownIcon className={cn("size-4", className)} />
+            <ChevronDownIcon className={cn("size-4", className)} {...props} />
           )
         },
         DayButton: CalendarDayButton,
